@@ -1,0 +1,15 @@
+[package]
+name = "procdump"
+version = "0.0.0"
+authors = ["Andrew Chin <achin@eminence32.net>"]
+edition = "2018"
+description = "A linux command-line tool to display information about a running process"
+readme = "README.md"
+repository = "https://github.com/eminence/procdump"
+license = "MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+procfs = "0.7.2"
+terminal_size = "0.1.8"
