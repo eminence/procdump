@@ -1,14 +1,17 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::ffi::OsString;
+use std::iter::FromIterator;
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use procfs::net::{TcpNetEntry, UdpNetEntry, UnixNetEntry};
 use procfs::process::{FDInfo, Process};
+use procfs::{CGroupController, ProcessCgroup};
 use procfs::{ProcError, ProcResult};
 use termion::event::Key;
 use tui::backend::Backend;
-use tui::layout::Rect;
+use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::*;
 use tui::terminal::Frame;
 use tui::widgets::*;
@@ -369,7 +372,7 @@ impl AppWidget for FilesWidget {
                 use procfs::process::FDTarget;
                 let fd_style = Style::default().fg(Color::Green);
                 for fd in fds {
-                    text.push(Text::styled(format!("{: <3}", fd.fd), fd_style));
+                    text.push(Text::styled(format!("{: <3} ", fd.fd), fd_style));
                     match &fd.target {
                         FDTarget::Path(path) => text.push(Text::styled(
                             format!("{}", path.display()),
@@ -621,7 +624,7 @@ impl AppWidget for LimitWidget {
         };
 
         Table::new(headers.iter(), rows.into_iter())
-            .widths(&[18, 12, 12, 11])
+            .widths(&[Constraint::Length(18), Constraint::Length(12), Constraint::Length(12), Constraint::Length(11)])
             .render(f, area);
     }
     fn update(&mut self, proc: &Process) {
@@ -787,6 +790,227 @@ impl AppWidget for TreeWidget {
             }
             Key::Down => {
                 if self.select_idx < self.children.len() as i16 {
+                    self.select_idx += 1;
+                    true
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    }
+}
+
+pub struct CGroupWidget {
+    proc_groups: ProcResult<Vec<ProcessCgroup>>,
+    last_updated: Instant,
+
+    // map from controller name to mount path
+    v1_controllers: HashMap<BTreeSet<String>, PathBuf>,
+    select_idx: u16,
+}
+
+impl CGroupWidget {
+    pub fn new(proc: &Process) -> CGroupWidget {
+        let mut map = HashMap::new();
+
+        // get the list of v1 controllers on this system
+        let groups: HashSet<String> = procfs::cgroups()
+            .ok()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|cg| if cg.enabled { Some(cg.name) } else { None })
+            .collect();
+
+        if let Ok(mountinfo) = proc.mountinfo() {
+            for mut mi in mountinfo {
+                if mi.fs_type == "cgroup" {
+                    let super_options: HashSet<String> =
+                        HashSet::from_iter(mi.super_options.drain().map(|(k, _)| k));
+                    let controllers: BTreeSet<String> =
+                        super_options.intersection(&groups).cloned().collect();
+                    map.insert(controllers, mi.mount_point);
+                }
+            }
+        }
+
+        let groups = proc.cgroups().map(|mut l| {
+            l.sort_by_key(|g| g.hierarchy);
+            l
+        });
+
+        CGroupWidget {
+            last_updated: Instant::now(),
+            proc_groups: groups,
+            v1_controllers: map,
+            select_idx: 0,
+        }
+    }
+}
+
+impl AppWidget for CGroupWidget {
+    const TITLE: &'static str = "CGroups";
+    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+        use std::fs::read_to_string;
+
+        // split the area in half -- the left side is a selectable list of controllers, and the
+        // right side is some details about them
+
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .margin(0)
+            .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)].as_ref())
+            .split(area);
+
+        let green = Style::default().fg(Color::Green);
+        let selected = Style::default().fg(Color::Yellow);
+
+        let mut text = Vec::new();
+        let mut details = Vec::new();
+
+        if let Ok(cgroups) = &self.proc_groups {
+            for (idx, cg) in cgroups.iter().enumerate() {
+                let current = idx == self.select_idx as usize;
+                let groups = BTreeSet::from_iter(cg.controllers.clone());
+                let controller_name = if cg.controllers.is_empty() { "???".to_owned()} else { cg.controllers.join(",") };
+                if let Some(mountpoint) = self.v1_controllers.get(&groups) {
+                    text.push(Text::styled(
+                        format!("{}: ", controller_name),
+                        if current {
+                            green
+                        } else {
+                            selected
+                        },
+                    ));
+                    text.push(Text::raw(format!("{}\n", cg.pathname)));
+
+                    let root = if cg.pathname.starts_with('/') {
+                        mountpoint.join(&cg.pathname[1..])
+                    } else {
+                        mountpoint.join(&cg.pathname)
+                    };
+
+                    if current {
+                        details.push(Text::raw(format!("{:?}\n", groups)));
+                        if groups.contains("pids") {
+                            let current = read_to_string(root.join("pids.current"));
+                            let max = read_to_string(root.join("pids.max"));
+                            if let (Ok(current), Ok(max)) = (current, max) {
+                                details.push(Text::raw(format!("{} of {}\n", current.trim(), max.trim())));
+                            }
+                        } 
+                        if groups.contains("freezer") {
+                            let state = read_to_string(root.join("freezer.state"));
+                            if let Ok(state) = state {
+                                details.push(Text::raw(format!("state: {}\n", state.trim())));
+                            }
+
+                        } 
+                        if groups.contains("memory") {
+                            if let Ok(usage) = read_to_string(root.join("memory.usage_in_bytes")) {
+                                details.push(Text::raw(format!("Group Usage: {} bytes\n", usage.trim())));
+                            }
+                            if let Ok(limit) = read_to_string(root.join("memory.limit_in_bytes")) {
+                                details.push(Text::raw(format!("Group Limit: {} bytes\n", limit.trim())));
+                            }
+                            if let Ok(usage) = read_to_string(root.join("memory.kmem.usage_in_bytes")) {
+                                details.push(Text::raw(format!("Kernel Usage: {} bytes\n", usage.trim())));
+                            }
+                            if let Ok(limit) = read_to_string(root.join("memory.kmem.limit_in_bytes")) {
+                                details.push(Text::raw(format!("Kernel Limit: {} bytes\n", limit.trim())));
+                            }
+                            if let Ok(limit) = read_to_string(root.join("memory.stat")) {
+                                details.push(Text::raw("stats:\n"));
+                                details.push(Text::raw(limit));
+                            }
+                        } 
+                        if groups.contains("net_cls") {
+                            if let Ok(classid) = read_to_string(root.join("net_cls.classid")) {
+                                details.push(Text::raw(format!("Class ID: {}\n", classid.trim())));
+                            }
+                        } 
+                        if groups.contains("net_prio") {
+                            if let Ok(idx) = read_to_string(root.join("net_prio.prioidx")) {
+                                details.push(Text::raw(format!("Prioidx: {}\n", idx)));
+                            }
+                            if let Ok(map) = read_to_string(root.join("net_prio.ifpriomap")) {
+                                details.push(Text::raw("ifpriomap:\n"));
+                                details.push(Text::raw(map));
+                            }
+
+                        } 
+                        if groups.contains("blkio") {
+
+                        }
+                        if groups.contains("cpuacct") {
+                            if let Ok(acct) = read_to_string(root.join("cpuacct.usage")) {
+                                details.push(Text::raw(format!("Total nanoseconds: {}\n", acct.trim())));
+                            }
+                            if let Ok(usage_all) = read_to_string(root.join("cpuacct.usage_all")) {
+                                details.push(Text::raw(usage_all));
+                            }
+                        } 
+                        {
+                            details.push(Text::raw(format!("--> {:?}\n", mountpoint)));
+                            details.push(Text::raw(format!("--> {:?}\n", cg.pathname)));
+                        }
+                    }
+                } else {
+                    text.push(Text::styled(
+                        format!("{}: ", controller_name),
+                        if current {
+                            green.modifier(Modifier::DIM)
+                        } else {
+                            selected.modifier(Modifier::DIM)
+                        },
+                    ));
+                    text.push(Text::raw(format!("{}\n", cg.pathname)));
+                    if idx == self.select_idx as usize {
+                        details.push(Text::raw("This controller isn't supported by procdump"));
+                    }
+
+                }
+            }
+        }
+
+        let target_offset = chunks[0].height as i32 / 2; // 12
+        let diff = self.select_idx as i32 - target_offset;
+        let max_scroll = std::cmp::max(0, text.len() as i32 - chunks[0].height as i32);
+        let scroll = std::cmp::min(std::cmp::max(0, diff), max_scroll as i32);
+
+        Paragraph::new(text.iter())
+            .block(Block::default().borders(Borders::NONE))
+            .wrap(false)
+            .scroll(scroll as u16)
+            .render(f, chunks[0]);
+        
+        Paragraph::new(details.iter())
+            .block(Block::default().borders(Borders::LEFT))
+            .wrap(true)
+            .render(f, chunks[1]);
+    }
+    fn update(&mut self, proc: &Process) {
+        if self.last_updated.elapsed() > TEN_SECONDS {
+            self.proc_groups = proc.cgroups().map(|mut l| {
+                l.sort_by_key(|g| g.hierarchy);
+                l
+            });
+            self.last_updated = Instant::now();
+        }
+    }
+    fn handle_input(&mut self, input: Key, height: u16) -> bool {
+        match input {
+            Key::Up => {
+                if self.select_idx > 0 {
+                    self.select_idx -= 1;
+                    true
+                } else {
+                    false
+                }
+            }
+            Key::Down => {
+                let max = self.proc_groups.as_ref().map_or_else(|_| 0, |v| v.len() - 1);
+                if (self.select_idx as usize) < max {
                     self.select_idx += 1;
                     true
                 } else {

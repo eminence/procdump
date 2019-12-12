@@ -194,6 +194,7 @@ pub struct App<'a> {
     files_widget: ui::FilesWidget,
     limit_widget: ui::LimitWidget,
     tree_widget: ui::TreeWidget,
+    cgroup_widget: ui::CGroupWidget,
     tab: TabState<'a>,
     tab_scroll_offset: u16,
     stat_d: StatDelta<procfs::process::Stat>,
@@ -211,6 +212,7 @@ impl<'a> App<'a> {
             files_widget: ui::FilesWidget::new(&proc),
             limit_widget: ui::LimitWidget::new(&proc),
             tree_widget: ui::TreeWidget::new(&proc),
+            cgroup_widget: ui::CGroupWidget::new(&proc),
             tps: procfs::ticks_per_second().unwrap(),
             stat_d: StatDelta::<procfs::process::Stat>::new(proc.clone()),
             io_d: StatDelta::<procfs::process::Io>::new(proc.clone()),
@@ -221,6 +223,7 @@ impl<'a> App<'a> {
                 ui::FilesWidget::TITLE,
                 ui::LimitWidget::TITLE,
                 ui::TreeWidget::TITLE,
+                ui::CGroupWidget::TITLE,
             ]),
             tab_scroll_offset: 0,
             cpu_spark: SparklineData::new(),
@@ -237,6 +240,7 @@ impl<'a> App<'a> {
             self.files_widget = ui::FilesWidget::new(&proc);
             self.limit_widget = ui::LimitWidget::new(&proc);
             self.tree_widget = ui::TreeWidget::new(&proc);
+            self.cgroup_widget = ui::CGroupWidget::new(&proc);
             self.stat_d = StatDelta::<procfs::process::Stat>::new(proc.clone());
             self.io_d = StatDelta::<procfs::process::Io>::new(proc.clone());
             self.cpu_spark = SparklineData::new();
@@ -250,6 +254,7 @@ impl<'a> App<'a> {
             ui::MapsWidget::TITLE => self.maps_widget.handle_input(input, height),
             ui::FilesWidget::TITLE => self.files_widget.handle_input(input, height),
             ui::LimitWidget::TITLE => self.limit_widget.handle_input(input, height),
+            ui::CGroupWidget::TITLE => self.cgroup_widget.handle_input(input, height),
             ui::TreeWidget::TITLE => {
                 if input == Key::Char('\n') {
                     let new_pid = self.tree_widget.get_selected_pid();
@@ -284,6 +289,7 @@ impl<'a> App<'a> {
         self.files_widget.update(&self.proc);
         self.limit_widget.update(&self.proc);
         self.tree_widget.update(&self.proc);
+        self.cgroup_widget.update(&self.proc);
         self.stat_d.update();
         if let Ok(ref mut iod) = self.io_d {
             iod.update();
@@ -525,8 +531,11 @@ impl<'a> App<'a> {
             ui::LimitWidget::TITLE => {
                 self.limit_widget.draw(f, area);
             }
-            "Tree" => {
+            ui::TreeWidget::TITLE => {
                 self.tree_widget.draw(f, area);
+            }
+            ui::CGroupWidget::TITLE => {
+                self.cgroup_widget.draw(f, area);
             }
             _ => {}
         }
