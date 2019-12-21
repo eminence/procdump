@@ -7,11 +7,10 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-#procfs = "0.7.2"
-procfs = {path = "/nas/achin/devel/procfs", features=["chrono"]}
+procfs = "0.7.6"
 terminal_size = "0.1.8"
 libc = "0.2"
-tui = "0.7"
+tui = "0.8"
 termion = "1.5"
 log = "0.4"
 anyhow = "1"
