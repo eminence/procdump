@@ -1201,16 +1201,17 @@ impl AppWidget for IOWidget {
             )
             .split(chunks[1]);
 
-        for (idx, data) in [
+        for (idx, (data, max)) in [
             self.io_spark.as_slice(),
             self.ops_spark.as_slice(),
             self.disk_spark.as_slice(),
         ]
         .iter()
+        .zip([10000, 100, 10000].iter())
         .enumerate()
         {
             let s = std::cmp::max(0, data.len() as i32 - chunks[1].width as i32) as usize;
-            let max = std::cmp::max(1000, *data[s..].into_iter().max().unwrap_or(&1) as u64);
+            let max = std::cmp::max(*max, *data[s..].into_iter().max().unwrap_or(&1) as u64);
             Sparkline::default()
                 .data(&data[s..])
                 .max(max)
