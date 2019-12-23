@@ -109,23 +109,23 @@ pub(crate) fn fmt_time(dt: chrono::DateTime<chrono::offset::Local>) -> impl Disp
 
 pub(crate) fn fmt_bytes(b: u64, suffix: &'static str) -> String {
     if b > 1000 * 1000 * 1000 {
-        format!("{}G{}", b / 1000 / 1000 / 1000, suffix)
+        format!("{:.2} G{}", b as f64 / 1000.0 / 1000.0 / 1000.0, suffix)
     } else if b > 1000 * 1000 {
-        format!("{}M{}", b / 1000 / 1000, suffix)
+        format!("{:.2} M{}", b as f64 / 1000.0 / 1000.0, suffix)
     } else if b > 1000 {
-        format!("{}K{}", b / 1000, suffix)
+        format!("{:.2} K{}", b as f64 / 1000.0, suffix)
     } else {
-        format!("{}{}", b, suffix)
+        format!("{} {}", b, suffix)
     }
 }
 
 pub(crate) fn fmt_rate(b: f32, suffix: &'static str) -> String {
     if b > 1000.0 * 1000.0 {
-        format!("{:.1}M{}", b / 1000.0 / 1000.0, suffix)
+        format!("{:.1} M{}", b / 1000.0 / 1000.0, suffix)
     } else if b > 1000.0 {
-        format!("{:.1}K{}", b / 1000.0, suffix)
+        format!("{:.1} K{}", b / 1000.0, suffix)
     } else {
-        format!("{:.1}{}", b, suffix)
+        format!("{:.1} {}", b, suffix)
     }
 }
 

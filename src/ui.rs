@@ -17,8 +17,10 @@ use tui::terminal::Frame;
 use tui::widgets::*;
 
 use crate::util;
-use crate::util::limit_to_string;
+use crate::util::{fmt_bytes, fmt_rate, fmt_time, limit_to_string};
+use crate::{SparklineData, StatDelta};
 
+const ONE_SECONDS: Duration = Duration::from_secs(1);
 const TWO_SECONDS: Duration = Duration::from_secs(2);
 const TEN_SECONDS: Duration = Duration::from_secs(10);
 
@@ -1019,5 +1021,204 @@ impl AppWidget for CGroupWidget {
             }
             _ => false,
         }
+    }
+}
+
+pub struct IOWidget {
+    last_updated: Instant,
+    //io: procfs::ProcResult<procfs::process::Io>,
+    io_d: anyhow::Result<StatDelta<procfs::process::Io>>,
+    io_spark: SparklineData,
+    ops_spark: SparklineData,
+    disk_spark: SparklineData,
+}
+
+impl IOWidget {
+    pub fn new(proc: &Process) -> IOWidget {
+        //let io = proc.io();
+        IOWidget {
+            last_updated: Instant::now(),
+            io_d: StatDelta::<procfs::process::Io>::new(proc.clone()),
+            io_spark: SparklineData::new(),
+            ops_spark: SparklineData::new(),
+            disk_spark: SparklineData::new(),
+        }
+    }
+}
+
+impl AppWidget for IOWidget {
+    const TITLE: &'static str = "IO";
+    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .margin(0)
+            .constraints([Constraint::Length(52), Constraint::Min(1)].as_ref())
+            .split(area);
+
+        let spark_colors = [Color::LightCyan, Color::LightMagenta, Color::LightGreen];
+        let mut text = Vec::new();
+        let s = Style::default().fg(Color::Green);
+        if let Ok(ref io_d) = self.io_d {
+            let io = io_d.latest();
+            let prev_io = io_d.previous();
+            let duration = io_d.duration();
+            let dur_sec = duration.as_millis() as f32 / 1000.0;
+
+            // all IO
+            text.push(Text::styled("all io read: ", s));
+            text.push(Text::raw(format!("{: <12}", fmt_bytes(io.rchar, "B"))));
+            text.push(Text::styled("all io write:", s));
+            text.push(Text::raw(format!("{: <12}", fmt_bytes(io.wchar, "B"))));
+            text.push(Text::styled(
+                "\u{2503}\n",
+                Style::default().fg(spark_colors[0]),
+            ));
+
+            let io_read_rate = (io.rchar - prev_io.rchar) as f32 / dur_sec;
+            let io_write_rate = (io.wchar - prev_io.wchar) as f32 / dur_sec;
+
+            text.push(Text::styled("read rate:   ", s));
+            text.push(Text::raw(format!("{: <12}", fmt_rate(io_read_rate, "Bps"))));
+            text.push(Text::styled("write rate:  ", s));
+            text.push(Text::raw(format!(
+                "{: <12}",
+                fmt_rate(io_write_rate, "Bps")
+            )));
+            text.push(Text::styled(
+                "\u{2503}\n",
+                Style::default().fg(spark_colors[0]),
+            ));
+
+            // syscalls
+            text.push(Text::styled("read ops:    ", s));
+            text.push(Text::raw(format!("{: <12}", fmt_bytes(io.syscr, ""))));
+            text.push(Text::styled("write ops:   ", s));
+            text.push(Text::raw(format!("{: <12}", fmt_bytes(io.syscw, ""))));
+            text.push(Text::styled(
+                "\u{2503}\n",
+                Style::default().fg(spark_colors[1]),
+            ));
+
+            let io_rop_rate = (io.syscr - prev_io.syscr) as f32 / dur_sec;
+            let io_wop_rate = (io.syscw - prev_io.syscw) as f32 / dur_sec;
+
+            text.push(Text::styled("op rate:     ", s));
+            text.push(Text::raw(format!("{: <12}", fmt_rate(io_rop_rate, "ps"))));
+            text.push(Text::styled("op rate:     ", s));
+            text.push(Text::raw(format!("{: <12}", fmt_rate(io_wop_rate, "ps"))));
+            text.push(Text::styled(
+                "\u{2503}\n",
+                Style::default().fg(spark_colors[1]),
+            ));
+
+            // disk IO
+            text.push(Text::styled("disk reads:  ", s));
+            text.push(Text::raw(format!("{: <12}", fmt_bytes(io.read_bytes, "B"))));
+            text.push(Text::styled("disk writes: ", s));
+            text.push(Text::raw(format!(
+                "{: <12}",
+                fmt_bytes(io.write_bytes, "B")
+            )));
+            text.push(Text::styled(
+                "\u{2503}\n",
+                Style::default().fg(spark_colors[2]),
+            ));
+
+            let disk_read_rate = (io.read_bytes - prev_io.read_bytes) as f32 / dur_sec;
+            let disk_write_rate = (io.write_bytes - prev_io.write_bytes) as f32 / dur_sec;
+
+            text.push(Text::styled("disk rate:   ", s));
+            text.push(Text::raw(format!(
+                "{: <12}",
+                fmt_rate(disk_read_rate, "Bps")
+            )));
+            text.push(Text::styled("disk rate:   ", s));
+            text.push(Text::raw(format!(
+                "{: <12}",
+                fmt_rate(disk_write_rate, "Bps")
+            )));
+            text.push(Text::styled(
+                "\u{2503}\n",
+                Style::default().fg(spark_colors[2]),
+            ));
+
+            //let rps  = (io.rchar - prev_io.rchar) as f32 / dur_sec;
+            //text.push(Text::raw(format!("{} ({}) ", fmt_bytes(io.rchar), fmt_rate(rps))));
+
+            //text.push(Text::styled("ops:", s.clone()));
+            //let ops = (io.syscr - prev_io.syscr) as f32 / dur_sec;
+            //text.push(Text::raw(format!("{} ({})", fmt_bytes(io.syscr), fmt_rate(ops))));
+            //
+            //text.push(Text::styled("disk:", s.clone()));
+            //let rps = (io.read_bytes - prev_io.read_bytes) as f32 / dur_sec;
+            //text.push(Text::raw(format!("{} ({})", fmt_bytes(io.read_bytes), fmt_rate(rps))));
+        }
+
+        Paragraph::new(text.iter())
+            .block(Block::default().borders(Borders::NONE))
+            .wrap(true)
+            .render(f, chunks[0]);
+
+        // split the right side into 3 areas to draw the sparklines
+        //
+        let spark_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .margin(0)
+            .constraints(
+                [
+                    Constraint::Max(2),
+                    Constraint::Max(2),
+                    Constraint::Max(2),
+                    Constraint::Max(2),
+                ]
+                .as_ref(),
+            )
+            .split(chunks[1]);
+
+        for (idx, data) in [
+            self.io_spark.as_slice(),
+            self.ops_spark.as_slice(),
+            self.disk_spark.as_slice(),
+        ]
+        .iter()
+        .enumerate()
+        {
+            let s = std::cmp::max(0, data.len() as i32 - chunks[1].width as i32) as usize;
+            let max = std::cmp::max(1000, *data[s..].into_iter().max().unwrap_or(&1) as u64);
+            Sparkline::default()
+                .data(&data[s..])
+                .max(max)
+                .style(Style::default().fg(spark_colors[idx]))
+                .render(f, spark_chunks[idx]);
+        }
+    }
+    fn update(&mut self, _proc: &Process) {
+        if self.last_updated.elapsed() > ONE_SECONDS {
+            if let Ok(ref mut io_d) = self.io_d {
+                io_d.update();
+
+                let io = io_d.latest();
+                let prev_io = io_d.previous();
+                let duration = io_d.duration();
+                let dur_sec = duration.as_millis() as f32 / 1000.0;
+
+                let io_read_rate = (io.rchar - prev_io.rchar) as f32 / dur_sec;
+                let io_write_rate = (io.wchar - prev_io.wchar) as f32 / dur_sec;
+                self.io_spark.push((io_read_rate + io_write_rate) as u64);
+
+                let io_rop_rate = (io.syscr - prev_io.syscr) as f32 / dur_sec;
+                let io_wop_rate = (io.syscw - prev_io.syscw) as f32 / dur_sec;
+                self.ops_spark.push((io_rop_rate + io_wop_rate) as u64);
+
+                let disk_read_rate = (io.read_bytes - prev_io.read_bytes) as f32 / dur_sec;
+                let disk_write_rate = (io.write_bytes - prev_io.write_bytes) as f32 / dur_sec;
+                self.disk_spark
+                    .push((disk_read_rate + disk_write_rate) as u64);
+            }
+            self.last_updated = Instant::now();
+        }
+    }
+    fn handle_input(&mut self, _input: Key, _height: u16) -> bool {
+        true
     }
 }

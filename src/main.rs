@@ -193,10 +193,10 @@ pub struct App<'a> {
     limit_widget: ui::LimitWidget,
     tree_widget: ui::TreeWidget,
     cgroup_widget: ui::CGroupWidget,
+    io_widget: ui::IOWidget,
     tab: TabState<'a>,
     tab_scroll_offset: u16,
     stat_d: StatDelta<procfs::process::Stat>,
-    io_d: anyhow::Result<StatDelta<procfs::process::Io>>,
     cpu_spark: SparklineData,
     //io_bytes_read: Rate<u64>
 }
@@ -211,9 +211,9 @@ impl<'a> App<'a> {
             limit_widget: ui::LimitWidget::new(&proc),
             tree_widget: ui::TreeWidget::new(&proc),
             cgroup_widget: ui::CGroupWidget::new(&proc),
+            io_widget: ui::IOWidget::new(&proc),
             tps: procfs::ticks_per_second().unwrap(),
             stat_d: StatDelta::<procfs::process::Stat>::new(proc.clone()),
-            io_d: StatDelta::<procfs::process::Io>::new(proc.clone()),
             tab: TabState::new(&[
                 ui::EnvWidget::TITLE,
                 ui::NetWidget::TITLE,
@@ -222,6 +222,7 @@ impl<'a> App<'a> {
                 ui::LimitWidget::TITLE,
                 ui::TreeWidget::TITLE,
                 ui::CGroupWidget::TITLE,
+                ui::IOWidget::TITLE,
             ]),
             tab_scroll_offset: 0,
             cpu_spark: SparklineData::new(),
@@ -239,8 +240,8 @@ impl<'a> App<'a> {
             self.limit_widget = ui::LimitWidget::new(&proc);
             self.tree_widget = ui::TreeWidget::new(&proc);
             self.cgroup_widget = ui::CGroupWidget::new(&proc);
+            self.io_widget = ui::IOWidget::new(&proc);
             self.stat_d = StatDelta::<procfs::process::Stat>::new(proc.clone());
-            self.io_d = StatDelta::<procfs::process::Io>::new(proc.clone());
             self.cpu_spark = SparklineData::new();
             self.proc = proc;
         }
@@ -253,6 +254,7 @@ impl<'a> App<'a> {
             ui::FilesWidget::TITLE => self.files_widget.handle_input(input, height),
             ui::LimitWidget::TITLE => self.limit_widget.handle_input(input, height),
             ui::CGroupWidget::TITLE => self.cgroup_widget.handle_input(input, height),
+            ui::IOWidget::TITLE => self.io_widget.handle_input(input, height),
             ui::TreeWidget::TITLE => {
                 if input == Key::Char('\n') {
                     let new_pid = self.tree_widget.get_selected_pid();
@@ -288,10 +290,8 @@ impl<'a> App<'a> {
         self.limit_widget.update(&self.proc);
         self.tree_widget.update(&self.proc);
         self.cgroup_widget.update(&self.proc);
+        self.io_widget.update(&self.proc);
         self.stat_d.update();
-        if let Ok(ref mut iod) = self.io_d {
-            iod.update();
-        }
 
         let cpu_usage = self.stat_d.cpu_percentage();
         self.cpu_spark.push(cpu_usage.round() as u64);
@@ -423,84 +423,7 @@ impl<'a> App<'a> {
             .wrap(true)
             .render(f, chunks[1]);
 
-        // third block is IO info
-        let mut text = Vec::new();
-        if let Ok(ref io_d) = self.io_d {
-            let io = io_d.latest();
-            let prev_io = io_d.previous();
-            let duration = io_d.duration();
-            let dur_sec = duration.as_millis() as f32 / 1000.0;
-
-            // all IO
-            text.push(Text::styled("io read:  ", s));
-            text.push(Text::raw(format!("{: <8}", fmt_bytes(io.rchar, "B"))));
-            text.push(Text::styled("io write: ", s));
-            text.push(Text::raw(format!("{: <8}\n", fmt_bytes(io.wchar, "B"))));
-
-            let io_read_rate = (io.rchar - prev_io.rchar) as f32 / dur_sec;
-            let io_write_rate = (io.wchar - prev_io.wchar) as f32 / dur_sec;
-
-            text.push(Text::styled("rd rate:  ", s));
-            text.push(Text::raw(format!("{: <8}", fmt_rate(io_read_rate, "Bps"))));
-            text.push(Text::styled("wr rate:  ", s));
-            text.push(Text::raw(format!(
-                "{: <8}\n",
-                fmt_rate(io_write_rate, "Bps")
-            )));
-
-            // syscalls
-            text.push(Text::styled("read ops: ", s));
-            text.push(Text::raw(format!("{: <8}", fmt_bytes(io.syscr, ""))));
-            text.push(Text::styled("write ops:", s));
-            text.push(Text::raw(format!("{: <8}\n", fmt_bytes(io.syscw, ""))));
-
-            let io_rop_rate = (io.syscr - prev_io.syscr) as f32 / dur_sec;
-            let io_wop_rate = (io.syscw - prev_io.syscw) as f32 / dur_sec;
-
-            text.push(Text::styled("op rate:  ", s));
-            text.push(Text::raw(format!("{: <8}", fmt_rate(io_rop_rate, "ps"))));
-            text.push(Text::styled("op rate:  ", s));
-            text.push(Text::raw(format!("{: <8}\n", fmt_rate(io_wop_rate, "ps"))));
-
-            // disk IO
-            text.push(Text::styled("disk rds: ", s));
-            text.push(Text::raw(format!("{: <8}", fmt_bytes(io.read_bytes, "B"))));
-            text.push(Text::styled("disk wrs: ", s));
-            text.push(Text::raw(format!(
-                "{: <8}\n",
-                fmt_bytes(io.write_bytes, "B")
-            )));
-
-            let disk_read_rate = (io.read_bytes - prev_io.read_bytes) as f32 / dur_sec;
-            let disk_write_rate = (io.write_bytes - prev_io.write_bytes) as f32 / dur_sec;
-
-            text.push(Text::styled("disk rate:", s));
-            text.push(Text::raw(format!(
-                "{: <8}",
-                fmt_rate(disk_read_rate, "Bps")
-            )));
-            text.push(Text::styled("disk rate:", s));
-            text.push(Text::raw(format!(
-                "{: <8}\n",
-                fmt_rate(disk_write_rate, "Bps")
-            )));
-
-            //let rps  = (io.rchar - prev_io.rchar) as f32 / dur_sec;
-            //text.push(Text::raw(format!("{} ({}) ", fmt_bytes(io.rchar), fmt_rate(rps))));
-
-            //text.push(Text::styled("ops:", s.clone()));
-            //let ops = (io.syscr - prev_io.syscr) as f32 / dur_sec;
-            //text.push(Text::raw(format!("{} ({})", fmt_bytes(io.syscr), fmt_rate(ops))));
-            //
-            //text.push(Text::styled("disk:", s.clone()));
-            //let rps = (io.read_bytes - prev_io.read_bytes) as f32 / dur_sec;
-            //text.push(Text::raw(format!("{} ({})", fmt_bytes(io.read_bytes), fmt_rate(rps))));
-        }
-
-        Paragraph::new(text.iter())
-            .block(Block::default().borders(Borders::NONE))
-            .wrap(true)
-            .render(f, chunks[2]);
+        // third block is ????
     }
 
     fn draw_tab_selector<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
@@ -535,7 +458,12 @@ impl<'a> App<'a> {
             ui::CGroupWidget::TITLE => {
                 self.cgroup_widget.draw(f, area);
             }
-            _ => {}
+            ui::IOWidget::TITLE => {
+                self.io_widget.draw(f, area);
+            }
+            t => {
+                panic!("Unhandled tab {}", t);
+            }
         }
     }
     fn draw_cpu_spark<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
