@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use procfs::net::{TcpNetEntry, UdpNetEntry, UnixNetEntry};
 use procfs::process::{FDInfo, Process};
-use procfs::{CGroupController, ProcessCgroup};
+use procfs::ProcessCgroup;
 use procfs::{ProcError, ProcResult};
 use termion::event::Key;
 use tui::backend::Backend;
@@ -17,7 +17,7 @@ use tui::terminal::Frame;
 use tui::widgets::*;
 
 use crate::util;
-use crate::util::{fmt_bytes, fmt_rate, fmt_time, limit_to_string};
+use crate::util::{fmt_bytes, fmt_rate, limit_to_string};
 use crate::{SparklineData, StatDelta};
 
 const ONE_SECONDS: Duration = Duration::from_secs(1);
@@ -626,7 +626,12 @@ impl AppWidget for LimitWidget {
         };
 
         Table::new(headers.iter(), rows.into_iter())
-            .widths(&[Constraint::Length(18), Constraint::Length(12), Constraint::Length(12), Constraint::Length(11)])
+            .widths(&[
+                Constraint::Length(18),
+                Constraint::Length(12),
+                Constraint::Length(12),
+                Constraint::Length(11),
+            ])
             .render(f, area);
     }
     fn update(&mut self, proc: &Process) {
@@ -874,15 +879,15 @@ impl AppWidget for CGroupWidget {
             for (idx, cg) in cgroups.iter().enumerate() {
                 let current = idx == self.select_idx as usize;
                 let groups = BTreeSet::from_iter(cg.controllers.clone());
-                let controller_name = if cg.controllers.is_empty() { "???".to_owned()} else { cg.controllers.join(",") };
+                let controller_name = if cg.controllers.is_empty() {
+                    "???".to_owned()
+                } else {
+                    cg.controllers.join(",")
+                };
                 if let Some(mountpoint) = self.v1_controllers.get(&groups) {
                     text.push(Text::styled(
                         format!("{}: ", controller_name),
-                        if current {
-                            green
-                        } else {
-                            selected
-                        },
+                        if current { green } else { selected },
                     ));
                     text.push(Text::raw(format!("{}\n", cg.pathname)));
 
@@ -898,39 +903,58 @@ impl AppWidget for CGroupWidget {
                             let current = read_to_string(root.join("pids.current"));
                             let max = read_to_string(root.join("pids.max"));
                             if let (Ok(current), Ok(max)) = (current, max) {
-                                details.push(Text::raw(format!("{} of {}\n", current.trim(), max.trim())));
+                                details.push(Text::raw(format!(
+                                    "{} of {}\n",
+                                    current.trim(),
+                                    max.trim()
+                                )));
                             }
-                        } 
+                        }
                         if groups.contains("freezer") {
                             let state = read_to_string(root.join("freezer.state"));
                             if let Ok(state) = state {
                                 details.push(Text::raw(format!("state: {}\n", state.trim())));
                             }
-
-                        } 
+                        }
                         if groups.contains("memory") {
                             if let Ok(usage) = read_to_string(root.join("memory.usage_in_bytes")) {
-                                details.push(Text::raw(format!("Group Usage: {} bytes\n", usage.trim())));
+                                details.push(Text::raw(format!(
+                                    "Group Usage: {} bytes\n",
+                                    usage.trim()
+                                )));
                             }
                             if let Ok(limit) = read_to_string(root.join("memory.limit_in_bytes")) {
-                                details.push(Text::raw(format!("Group Limit: {} bytes\n", limit.trim())));
+                                details.push(Text::raw(format!(
+                                    "Group Limit: {} bytes\n",
+                                    limit.trim()
+                                )));
                             }
-                            if let Ok(usage) = read_to_string(root.join("memory.kmem.usage_in_bytes")) {
-                                details.push(Text::raw(format!("Kernel Usage: {} bytes\n", usage.trim())));
+                            if let Ok(usage) =
+                                read_to_string(root.join("memory.kmem.usage_in_bytes"))
+                            {
+                                details.push(Text::raw(format!(
+                                    "Kernel Usage: {} bytes\n",
+                                    usage.trim()
+                                )));
                             }
-                            if let Ok(limit) = read_to_string(root.join("memory.kmem.limit_in_bytes")) {
-                                details.push(Text::raw(format!("Kernel Limit: {} bytes\n", limit.trim())));
+                            if let Ok(limit) =
+                                read_to_string(root.join("memory.kmem.limit_in_bytes"))
+                            {
+                                details.push(Text::raw(format!(
+                                    "Kernel Limit: {} bytes\n",
+                                    limit.trim()
+                                )));
                             }
                             if let Ok(limit) = read_to_string(root.join("memory.stat")) {
                                 details.push(Text::raw("stats:\n"));
                                 details.push(Text::raw(limit));
                             }
-                        } 
+                        }
                         if groups.contains("net_cls") {
                             if let Ok(classid) = read_to_string(root.join("net_cls.classid")) {
                                 details.push(Text::raw(format!("Class ID: {}\n", classid.trim())));
                             }
-                        } 
+                        }
                         if groups.contains("net_prio") {
                             if let Ok(idx) = read_to_string(root.join("net_prio.prioidx")) {
                                 details.push(Text::raw(format!("Prioidx: {}\n", idx)));
@@ -939,19 +963,19 @@ impl AppWidget for CGroupWidget {
                                 details.push(Text::raw("ifpriomap:\n"));
                                 details.push(Text::raw(map));
                             }
-
-                        } 
-                        if groups.contains("blkio") {
-
                         }
+                        if groups.contains("blkio") {}
                         if groups.contains("cpuacct") {
                             if let Ok(acct) = read_to_string(root.join("cpuacct.usage")) {
-                                details.push(Text::raw(format!("Total nanoseconds: {}\n", acct.trim())));
+                                details.push(Text::raw(format!(
+                                    "Total nanoseconds: {}\n",
+                                    acct.trim()
+                                )));
                             }
                             if let Ok(usage_all) = read_to_string(root.join("cpuacct.usage_all")) {
                                 details.push(Text::raw(usage_all));
                             }
-                        } 
+                        }
                         {
                             details.push(Text::raw(format!("--> {:?}\n", mountpoint)));
                             details.push(Text::raw(format!("--> {:?}\n", cg.pathname)));
@@ -970,7 +994,6 @@ impl AppWidget for CGroupWidget {
                     if idx == self.select_idx as usize {
                         details.push(Text::raw("This controller isn't supported by procdump"));
                     }
-
                 }
             }
         }
@@ -985,7 +1008,7 @@ impl AppWidget for CGroupWidget {
             .wrap(false)
             .scroll(scroll as u16)
             .render(f, chunks[0]);
-        
+
         Paragraph::new(details.iter())
             .block(Block::default().borders(Borders::LEFT))
             .wrap(true)
@@ -1011,7 +1034,10 @@ impl AppWidget for CGroupWidget {
                 }
             }
             Key::Down => {
-                let max = self.proc_groups.as_ref().map_or_else(|_| 0, |v| v.len() - 1);
+                let max = self
+                    .proc_groups
+                    .as_ref()
+                    .map_or_else(|_| 0, |v| v.len() - 1);
                 if (self.select_idx as usize) < max {
                     self.select_idx += 1;
                     true
