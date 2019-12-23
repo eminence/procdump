@@ -1,5 +1,3 @@
-#![feature(result_map_or_else)]
-
 use std::time::{Duration, Instant};
 
 use procfs::process::Process;
