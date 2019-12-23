@@ -602,10 +602,10 @@ impl AppWidget for LimitWidget {
             ));
             rows.push(Row::Data(
                 vec![
-                    Cow::Borrowed("Realtiem Timeout"),
+                    Cow::Borrowed("Realtime Timeout"),
                     limit_to_string(&limits.max_realtime_timeout.soft_limit),
                     limit_to_string(&limits.max_realtime_timeout.hard_limit),
-                    Cow::Borrowed("(useconds)"),
+                    Cow::Borrowed("(μseconds)"),
                 ]
                 .into_iter(),
             ));
