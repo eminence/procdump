@@ -436,18 +436,29 @@ impl<'a> App<'a> {
             .render(f, area);
     }
     fn draw_tab_body<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+        // split this into the body and a scrollbar area
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .margin(0)
+            .constraints([Constraint::Min(1), Constraint::Length(1)].as_ref())
+            .split(area);
+
         match self.tab.current_label() {
             ui::EnvWidget::TITLE => {
-                self.env_widget.draw(f, area);
+                self.env_widget.draw(f, chunks[0]);
+                self.env_widget.draw_scrollbar(f, chunks[1]);
             }
             ui::NetWidget::TITLE => {
-                self.net_widget.draw(f, area);
+                self.net_widget.draw(f, chunks[0]);
+                self.net_widget.draw_scrollbar(f, chunks[1]);
             }
             ui::MapsWidget::TITLE => {
-                self.maps_widget.draw(f, area);
+                self.maps_widget.draw(f, chunks[0]);
+                self.maps_widget.draw_scrollbar(f, chunks[1]);
             }
             ui::FilesWidget::TITLE => {
-                self.files_widget.draw(f, area);
+                self.files_widget.draw(f, chunks[0]);
+                self.files_widget.draw_scrollbar(f, chunks[1]);
             }
             ui::LimitWidget::TITLE => {
                 self.limit_widget.draw(f, area);

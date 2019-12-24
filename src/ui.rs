@@ -44,6 +44,46 @@ impl ScrollController {
             max_scroll: 0,
         }
     }
+    fn draw_scrollbar<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+        let p = (self.scroll_offset as f32 / self.max_scroll as f32) * area.height as f32;
+        if p.is_nan() {
+            return;
+        }
+        let whole = p.floor();
+        let rest = p - whole;
+        assert!(rest >= 0.0 && rest <= 1.0, "rest={} p={}", rest, p);
+        //let symbols = "·⸱⸳.";
+        let symbols = "\u{2588}\u{2587}\u{2586}\u{2585}\u{2584}\u{2583}\u{2582}\u{2581} "; // "█▇▆▅▄▃▂▁";
+        let text = [
+            Text::styled(
+                "_".repeat(whole as usize),
+                Style::default().fg(Color::Magenta).bg(Color::Magenta),
+            ),
+            {
+                let idx = (rest * (symbols.chars().count() - 1) as f32).round() as usize;
+                //assert!(idx <= 3, "idx={} rest={} len={}", idx, rest, symbols.chars().count());
+                let c = symbols.chars().nth(idx);
+                assert!(c.is_some(), "idx={}", idx);
+                let c = c.unwrap();
+                let fg = if c.is_whitespace() {
+                    Color::Magenta
+                } else {
+                    Color::White
+                };
+                let s = format!("{}", if c.is_whitespace() { '+' } else { c });
+                Text::styled(s, Style::default().fg(fg).bg(Color::Magenta))
+            },
+            Text::styled(
+                "_".repeat(area.height as usize),
+                Style::default().fg(Color::White).bg(Color::White),
+            ),
+        ];
+        Paragraph::new(text.iter())
+            .style(Style::default().fg(Color::White))
+            .wrap(true)
+            .render(f, area)
+        //"·⸱⸳."
+    }
     fn set_max_scroll(&mut self, max: i32) {
         let max: u16 = std::cmp::max(0, max) as u16;
         if self.scroll_offset >= max {
@@ -114,6 +154,9 @@ impl EnvWidget {
             scroll: ScrollController::new(),
         }
     }
+    pub fn draw_scrollbar<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+        self.scroll.draw_scrollbar(f, area)
+    }
 }
 
 impl AppWidget for EnvWidget {
@@ -183,6 +226,9 @@ impl NetWidget {
             last_updated: Instant::now(),
             scroll: ScrollController::new(),
         }
+    }
+    pub fn draw_scrollbar<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+        self.scroll.draw_scrollbar(f, area)
     }
 }
 
@@ -290,6 +336,9 @@ impl MapsWidget {
             scroll: ScrollController::new(),
         }
     }
+    pub fn draw_scrollbar<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+        self.scroll.draw_scrollbar(f, area)
+    }
 }
 
 impl AppWidget for MapsWidget {
@@ -369,6 +418,9 @@ impl FilesWidget {
             pipes_updated: Instant::now(),
             scroll: ScrollController::new(),
         }
+    }
+    pub fn draw_scrollbar<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+        self.scroll.draw_scrollbar(f, area)
     }
 }
 
