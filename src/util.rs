@@ -162,10 +162,10 @@ impl Events {
         });
 
         thread::spawn(move || loop {
-            thread::sleep(std::time::Duration::from_millis(1500));
             if let Err(..) = tx.send(self::Event::Tick) {
                 return;
             }
+            thread::sleep(std::time::Duration::from_millis(1500));
         });
 
         Events { rx }
