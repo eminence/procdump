@@ -508,23 +508,6 @@ fn main() -> anyhow::Result<()> {
     let mut need_redraw = true;
     let mut tab_body_height = 0;
     loop {
-        match events.rx.recv() {
-            Err(..) => break,
-            Ok(Event::Key(Key::Esc))
-            | Ok(Event::Key(Key::Char('q')))
-            | Ok(Event::Key(Key::Ctrl('c'))) => break,
-
-            Ok(Event::Key(k)) => {
-                need_redraw = app.handle_input(k, tab_body_height);
-            }
-            Ok(Event::Tick) => {
-                need_redraw = true;
-                app.tick();
-            }
-
-            _ => {}
-        }
-
         if need_redraw {
             // vertical layout has 5 sections:
             terminal.draw(|mut f| {
@@ -552,6 +535,23 @@ fn main() -> anyhow::Result<()> {
                 app.draw_cpu_spark(&mut f, chunks[4]);
             })?;
             need_redraw = false;
+        }
+
+        match events.rx.recv() {
+            Err(..) => break,
+            Ok(Event::Key(Key::Esc))
+            | Ok(Event::Key(Key::Char('q')))
+            | Ok(Event::Key(Key::Ctrl('c'))) => break,
+
+            Ok(Event::Key(k)) => {
+                need_redraw = app.handle_input(k, tab_body_height);
+            }
+            Ok(Event::Tick) => {
+                need_redraw = true;
+                app.tick();
+            }
+
+            _ => {}
         }
     }
 
