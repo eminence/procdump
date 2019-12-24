@@ -54,12 +54,14 @@ impl ScrollController {
     fn handle_input(&mut self, input: Key, height: u16) -> bool {
         let pageupdown_size = height / 3;
         match input {
-            Key::Down | Key::PageDown => {
+            Key::Down | Key::PageDown | Key::End => {
                 let to_move = std::cmp::max(self.max_scroll as i32 - self.scroll_offset as i32, 0);
                 let to_move = std::cmp::min(
                     to_move,
                     if input == Key::PageDown {
                         pageupdown_size
+                    } else if input == Key::End {
+                        self.max_scroll
                     } else {
                         1
                     } as i32,
@@ -70,6 +72,11 @@ impl ScrollController {
                 } else {
                     false
                 }
+            }
+            Key::Home => {
+                let p = self.scroll_offset;
+                self.scroll_offset = 0;
+                p > 0
             }
             Key::Up | Key::PageUp => {
                 let mut to_move = if input == Key::PageUp {

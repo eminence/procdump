@@ -129,6 +129,7 @@ pub(crate) fn fmt_rate(b: f32, suffix: &'static str) -> String {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum Event {
     Key(Key),
     Mouse(MouseEvent),

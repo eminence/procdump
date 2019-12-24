@@ -273,7 +273,7 @@ impl<'a> App<'a> {
                 self.tab_scroll_offset = 0;
                 true
             }
-            Key::Left => {
+            Key::BackTab | Key::Left => {
                 self.tab.select_prev();
                 self.tab_scroll_offset = 0;
                 true
@@ -508,34 +508,6 @@ fn main() -> anyhow::Result<()> {
     let mut need_redraw = true;
     let mut tab_body_height = 0;
     loop {
-        if need_redraw {
-            // vertical layout has 5 sections:
-            terminal.draw(|mut f| {
-                let chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .margin(0)
-                    .constraints(
-                        [
-                            Constraint::Length(1),     // very top line
-                            Constraint::Length(4 + 2), // top fixed-sized info box
-                            Constraint::Length(1 + 2), // tab selector
-                            Constraint::Min(0),        // tab body
-                            Constraint::Length(5),     // memory sparkline
-                            Constraint::Length(5),     // cpu sparkline
-                        ]
-                        .as_ref(),
-                    )
-                    .split(f.size());
-
-                tab_body_height = chunks[3].height;
-
-                app.draw_top(&mut f, chunks[0], chunks[1]);
-                app.draw_tab_selector(&mut f, chunks[2]);
-                app.draw_tab_body(&mut f, chunks[3]);
-                app.draw_cpu_spark(&mut f, chunks[4]);
-            })?;
-        }
-
         match events.rx.recv() {
             Err(..) => break,
             Ok(Event::Key(Key::Esc))
@@ -551,6 +523,35 @@ fn main() -> anyhow::Result<()> {
             }
 
             _ => {}
+        }
+
+        if need_redraw {
+            // vertical layout has 5 sections:
+            terminal.draw(|mut f| {
+                let chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .margin(0)
+                    .constraints(
+                        [
+                            Constraint::Length(1),     // very top line
+                            Constraint::Length(4 + 2), // top fixed-sized info box
+                            Constraint::Length(1 + 2), // tab selector
+                            Constraint::Min(0),        // tab body
+                            Constraint::Length(5),     // cpu sparkline
+                            Constraint::Length(5),     // cpu sparkline
+                        ]
+                        .as_ref(),
+                    )
+                    .split(f.size());
+
+                tab_body_height = chunks[3].height;
+
+                app.draw_top(&mut f, chunks[0], chunks[1]);
+                app.draw_tab_selector(&mut f, chunks[2]);
+                app.draw_tab_body(&mut f, chunks[3]);
+                app.draw_cpu_spark(&mut f, chunks[4]);
+            })?;
+            need_redraw = false;
         }
     }
 
