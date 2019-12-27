@@ -255,8 +255,8 @@ impl AppWidget for NetWidget {
                             if let Some(entry) = self.udp_map.get(&inode) {
                                 text.push(Text::styled("[udp] ", Style::default().fg(Color::Blue)));
                                 text.push(Text::raw(format!(
-                                    " {} -> {})\n",
-                                    entry.local_address, entry.remote_address
+                                    " {} -> {} ({:?})\n",
+                                    entry.local_address, entry.remote_address, entry.state
                                 )));
                             }
                             if let Some(entry) = self.unix_map.get(&inode) {
@@ -271,13 +271,14 @@ impl AppWidget for NetWidget {
                                     _ => "           ",
                                 }));
                                 if let Some(path) = &entry.path {
-                                    text.push(Text::raw(format!(" {}\n", path.display())));
+                                    text.push(Text::raw(format!(" {}", path.display())));
                                 } else {
                                     text.push(Text::styled(
-                                        " (no socket path)\n",
+                                        " (no socket path)",
                                         Style::default().fg(Color::Gray),
                                     ));
                                 }
+                                text.push(Text::raw(format!(" ({:?})\n", entry.state)));
                             }
                         }
                         _ => {}
