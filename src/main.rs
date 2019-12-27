@@ -204,10 +204,8 @@ pub struct App<'a> {
     cgroup_widget: ui::CGroupWidget,
     io_widget: ui::IOWidget,
     tab: TabState<'a>,
-    tab_scroll_offset: u16,
     stat_d: StatDelta<procfs::process::Stat>,
     cpu_spark: SparklineData,
-    //io_bytes_read: Rate<u64>
 }
 
 impl<'a> App<'a> {
@@ -233,9 +231,7 @@ impl<'a> App<'a> {
                 ui::CGroupWidget::TITLE,
                 ui::IOWidget::TITLE,
             ]),
-            tab_scroll_offset: 0,
             cpu_spark: SparklineData::new(),
-            //io_bytes_read: Rate::new(io.rchar),
             proc,
         }
     }
@@ -279,12 +275,10 @@ impl<'a> App<'a> {
         let input_redraw = match input {
             Key::Char('\t') | Key::Right => {
                 self.tab.select_next();
-                self.tab_scroll_offset = 0;
                 true
             }
             Key::BackTab | Key::Left => {
                 self.tab.select_prev();
-                self.tab_scroll_offset = 0;
                 true
             }
             Key::Char(c) => self.tab.select_by_char(c),
