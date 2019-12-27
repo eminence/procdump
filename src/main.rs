@@ -80,6 +80,15 @@ impl<'a> TabState<'a> {
             self.current_idx -= 1;
         }
     }
+    fn select_by_char(&mut self, c: char) -> bool {
+        for (idx, label) in self.labels.iter().enumerate() {
+            if label.chars().next() == Some(c) {
+                self.current_idx = idx;
+                return true;
+            }
+        }
+        false
+    }
 }
 
 struct StatDelta<T> {
@@ -278,6 +287,7 @@ impl<'a> App<'a> {
                 self.tab_scroll_offset = 0;
                 true
             }
+            Key::Char(c) => self.tab.select_by_char(c),
             _ => false,
         };
         widget_redraw || input_redraw
