@@ -359,11 +359,15 @@ impl<'a> App<'a> {
         text.push(Text::raw(format!("{} \n", self.proc.stat.session)));
 
         text.push(Text::styled("state:", s));
-        text.push(Text::raw(format!(
-            "{} ({:?}) ",
-            self.proc.stat.state,
-            self.proc.stat.state().unwrap()
-        )));
+        if self.proc.is_alive() {
+            text.push(Text::raw(format!(
+                "{} ({:?}) ",
+                self.proc.stat.state,
+                self.proc.stat.state().unwrap()
+            )));
+        } else {
+            text.push(Text::raw(format!("X (Dead) ")));
+        }
         text.push(Text::styled("started:", s));
         if let Ok(dt) = self.proc.stat.starttime() {
             text.push(Text::raw(format!("{}\n", fmt_time(dt))));
