@@ -404,7 +404,7 @@ impl AppWidget for MapsWidget {
 
 pub struct FilesWidget {
     fds: ProcResult<Vec<procfs::process::FDInfo>>,
-    pipe_inodes: HashMap<u32, (util::ProcTreeInfo, util::ProcTreeInfo)>,
+    pipe_inodes: HashMap<u32, (util::ProcessTreeEntry, util::ProcessTreeEntry)>,
     last_updated: Instant,
     pipes_updated: Instant,
     scroll: ScrollController,
@@ -706,38 +706,27 @@ impl AppWidget for LimitWidget {
 }
 
 pub struct TreeWidget {
-    parents: Vec<util::ProcTreeInfo>,
-    children: Vec<util::ProcTreeInfo>,
-    self_cmdline: String,
-    self_pid: i32,
+    tree: util::ProcessTree,
+    // /// list of processes, in tree order.  (depth, PTI)
+    // flattened: Vec<(u8, util::ProcTreeInfo)>,
     last_updated: Instant,
-    select_idx: i16,
+    /// The currently selected PID
+    selected_pid: i32,
+    show_all: bool,
 }
 
 impl TreeWidget {
     pub fn new(proc: &Process) -> TreeWidget {
-        let (parents, children) = util::proc_tree(proc);
+        let tree = util::ProcessTree::new(None).unwrap();
         TreeWidget {
-            parents,
-            children,
-            self_pid: proc.stat.pid,
-            self_cmdline: proc
-                .cmdline()
-                .ok()
-                .map_or(proc.stat.comm.clone(), |cmdline| cmdline.join(" ")),
+            tree,
+            show_all: true,
             last_updated: Instant::now(),
-            select_idx: 0,
+            selected_pid: proc.pid,
         }
     }
     pub fn get_selected_pid(&self) -> i32 {
-        if self.select_idx < 0 {
-            let idx = self.parents.len() as i16 + self.select_idx;
-            self.parents[idx as usize].pid
-        } else if self.select_idx == 0 {
-            self.self_pid
-        } else {
-            self.children[(self.select_idx - 1) as usize].pid
-        }
+        self.selected_pid
     }
 }
 
@@ -748,123 +737,169 @@ impl AppWidget for TreeWidget {
         let unselected_style = Style::default();
 
         let mut text = Vec::new();
-        let mut indent = if self.parents.is_empty() { 2 } else { 0 };
-        // Show our parents
-        for (i, pti) in self.parents.iter().enumerate() {
-            if indent == 0 {
-                text.push(Text::raw("\u{257e}\u{252c}\u{2574}"));
+
+        let flattened = self.tree.flatten();
+
+        let mut iter = flattened.iter().enumerate().peekable();
+        let mut last_depth = 0;
+        let mut prints = Vec::new();
+        while let Some((idx, (depth, item))) = iter.next() {
+            let depth = *depth as usize;
+            if depth > last_depth {
+                prints.push(item.num_siblings);
+            }
+            if depth < last_depth {
+                prints.truncate(depth);
+            }
+            assert_eq!(depth, prints.len());
+            last_depth = depth;
+            if depth > 0 && prints[depth - 1] > 0 {
+                prints[depth - 1] -= 1;
+            }
+
+            let lines = if idx == 0 {
+                "━┳╸".to_owned()
             } else {
+                prints
+                    .iter()
+                    .enumerate()
+                    .map(|(p_idx, n)| {
+                        if *n > 0 {
+                            if p_idx == depth - 1 {
+                                "┣"
+                            } else {
+                                "┆"
+                            }
+                        } else {
+                            if p_idx == depth - 1 {
+                                "┗"
+                            } else {
+                                " "
+                            }
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("")
+            };
+            text.push(Text::raw(lines));
+
+            if idx > 0 {
+                let has_children = iter
+                    .peek()
+                    .map(|(_, (p_depth, _))| *p_depth as usize > depth)
+                    .unwrap_or(false);
                 text.push(Text::raw(format!(
-                    "{:width$}\u{2514}\u{252c}\u{2574}",
-                    " ",
-                    width = indent
+                    "{b}╸",
+                    b = if has_children { "┳" } else { "━" },
                 )));
             }
-            text.push(Text::styled(
-                format!("{} {}\n", pti.pid, pti.cmdline),
-                if self.select_idx == 0 - self.parents.len() as i16 + i as i16 {
-                    selected_style
-                } else {
-                    unselected_style
-                },
-            ));
-
-            indent += 1;
-        }
-        // Show ourself in the tree
-        text.push(Text::raw(format!(
-            "{:width$}\u{2514}{}\u{2574}",
-            " ",
-            if self.children.is_empty() {
-                "\u{2500}"
-            } else {
-                "\u{252c}"
-            },
-            width = indent
-        )));
-        text.push(Text::styled(
-            format!("{} ", self.self_pid),
-            if self.select_idx == 0 {
-                Style::default().fg(Color::Yellow)
-            } else {
-                unselected_style
-            },
-        ));
-        text.push(Text::styled(
-            format!("{}\n", self.self_cmdline),
-            Style::default().fg(Color::Yellow),
-        ));
-
-        // Show our children
-        indent += 1;
-        for (i, pti) in self.children.iter().enumerate() {
-            text.push(Text::raw(format!(
-                "{:width$}{}\u{2500}\u{2574}",
-                " ",
-                if i == self.children.len() - 1 {
-                    "\u{2514}"
-                } else {
-                    "\u{251c}"
-                },
-                width = indent
-            )));
 
             text.push(Text::styled(
-                format!("{} {}\n", pti.pid, pti.cmdline),
-                if (self.select_idx - 1) == i as i16 {
+                format!("{} {}\n", item.pid, item.cmdline),
+                if item.pid == self.selected_pid {
                     selected_style
                 } else {
                     unselected_style
                 },
             ));
         }
+        let select_idx = flattened
+            .iter()
+            .enumerate()
+            .find(|(_idx, (_, item))| item.pid == self.selected_pid)
+            .unwrap()
+            .0 as i32;
 
         // in general, we want to have our selected line in the middle of the screen:
         let target_offset = area.height as i32 / 2; // 12
-        let selected_offset = self.select_idx as i32 + self.parents.len() as i32;
-        let diff = selected_offset - target_offset;
-        let max_scroll = std::cmp::max(
-            0,
-            self.parents.len() as i32 + 1 + self.children.len() as i32 - area.height as i32,
-        );
+        let diff = select_idx - target_offset;
+        let max_scroll = std::cmp::max(0, text.len() as i32 - area.height as i32);
         let scroll = std::cmp::min(std::cmp::max(0, diff), max_scroll as i32);
 
         //let max_scroll = get_numlines(text.iter(), area.width as usize) as i32 - area.height as i32;
         //self.set_max_scroll(max_scroll);
         Paragraph::new(text.iter())
             .block(Block::default().borders(Borders::NONE))
-            .wrap(false)
             .scroll(scroll as u16)
+            .wrap(false)
             .render(f, area);
     }
     fn update(&mut self, proc: &Process) {
         if self.last_updated.elapsed() > TWO_SECONDS {
-            let (parents, children) = util::proc_tree(proc);
-            self.parents = parents;
-            self.children = children;
+            // before we update, get a llist of our parents PIDs, all the way up to pid1.
+            // After the refresh, our selected process might be gone, so we'll want to instead
+            // select its next available parent
+            let mut pid = self.selected_pid;
+            let mut parents = Vec::new();
+            parents.push(self.selected_pid);
+            while pid > 1 {
+                if let Some(entry) = self.tree.entries.get(&pid) {
+                    parents.push(entry.ppid);
+                    pid = entry.ppid;
+                } else {
+                    break;
+                }
+            }
+            parents.push(1);
+            self.tree = util::ProcessTree::new(if self.show_all {
+                None
+            } else {
+                Some((&parents, proc))
+            })
+            .unwrap();
             self.last_updated = Instant::now();
+
+            if !self.tree.entries.contains_key(&self.selected_pid) {
+                for p in parents {
+                    if self.tree.entries.contains_key(&p) {
+                        self.selected_pid = p;
+                        break;
+                    }
+                }
+            }
         }
     }
     fn handle_input(&mut self, input: Key, _height: u16) -> bool {
-        match input {
+        let flattened = self.tree.flatten();
+        // the current index of the selected pid
+        let mut select_idx = flattened
+            .iter()
+            .enumerate()
+            .find(|(_idx, (_, item))| item.pid == self.selected_pid)
+            .unwrap()
+            .0 as i32;
+
+        let r = match input {
+            Key::Ctrl('t') => {
+                self.show_all = !self.show_all;
+                true
+            }
             Key::Up => {
-                if self.select_idx > 0 - self.parents.len() as i16 {
-                    self.select_idx -= 1;
+                if select_idx > 0 {
+                    select_idx -= 1;
                     true
                 } else {
                     false
                 }
             }
             Key::Down => {
-                if self.select_idx < self.children.len() as i16 {
-                    self.select_idx += 1;
+                if select_idx < flattened.len() as i32 {
+                    select_idx += 1;
                     true
                 } else {
                     false
                 }
             }
             _ => false,
+        };
+
+        // calculate new pid
+        if r {
+            if let Some((_, item)) = flattened.get(select_idx as usize) {
+                self.selected_pid = item.pid;
+            }
         }
+        r
     }
 }
 

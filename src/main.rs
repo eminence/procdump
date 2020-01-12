@@ -288,17 +288,19 @@ impl<'a> App<'a> {
     }
 
     fn tick(&mut self) {
-        self.env_widget.update(&self.proc);
-        self.net_widget.update(&self.proc);
-        self.files_widget.update(&self.proc);
-        self.limit_widget.update(&self.proc);
-        self.tree_widget.update(&self.proc);
-        self.cgroup_widget.update(&self.proc);
-        self.io_widget.update(&self.proc);
-        self.stat_d.update();
+        if self.proc.is_alive() {
+            self.env_widget.update(&self.proc);
+            self.net_widget.update(&self.proc);
+            self.files_widget.update(&self.proc);
+            self.limit_widget.update(&self.proc);
+            self.tree_widget.update(&self.proc);
+            self.cgroup_widget.update(&self.proc);
+            self.io_widget.update(&self.proc);
+            self.stat_d.update();
 
-        let cpu_usage = self.stat_d.cpu_percentage();
-        self.cpu_spark.push(cpu_usage.round() as u64);
+            let cpu_usage = self.stat_d.cpu_percentage();
+            self.cpu_spark.push(cpu_usage.round() as u64);
+        }
     }
 
     fn draw_top<B: Backend>(&self, f: &mut Frame<B>, top_area: Rect, area: Rect) {

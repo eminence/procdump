@@ -8,48 +8,131 @@ use procfs::process::{all_processes, LimitValue, Process};
 use termion::event::{Key, MouseEvent};
 use tui::widgets::Text;
 
-pub(crate) struct ProcTreeInfo {
+#[derive(Debug)]
+pub struct ProcessTreeEntry {
     pub pid: i32,
-    ppid: i32,
+    pub ppid: i32,
     pub cmdline: String,
+    pub num_siblings: u32,
+    pub children: Vec<i32>,
 }
 
-/// Returns a list of parent processes, and a list of direct child processes
-pub(crate) fn proc_tree(proc: &Process) -> (Vec<ProcTreeInfo>, Vec<ProcTreeInfo>) {
-    let all = all_processes().unwrap();
+#[derive(Debug)]
+pub struct ProcessTree {
+    pub entries: HashMap<i32, ProcessTreeEntry>,
+}
 
-    let mut map = HashMap::new();
+impl ProcessTree {
+    fn flatten_helper<'a>(
+        map: &'a HashMap<i32, ProcessTreeEntry>,
+        v: &mut Vec<(u8, &'a ProcessTreeEntry)>,
+        pid: i32,
+        depth: u8,
+    ) {
+        assert!(
+            map.get(&pid).is_some(),
+            "ProcessTree doesn't have an entry for pid {}",
+            pid
+        );
+        let p = map.get(&pid).unwrap();
 
-    let mut children = Vec::new();
-    for p in all {
-        let pti = ProcTreeInfo {
-            pid: p.stat.pid,
-            ppid: p.stat.ppid,
-            cmdline: p
+        v.push((depth, p));
+
+        for cid in &p.children {
+            if let Some(child) = map.get(&cid) {
+                Self::flatten_helper(map, v, child.pid, depth + 1);
+            }
+        }
+    }
+
+    pub fn flatten<'a>(&'a self) -> Vec<(u8, &'a ProcessTreeEntry)> {
+        let mut v = Vec::with_capacity(self.entries.len());
+        Self::flatten_helper(&self.entries, &mut v, 1, 1);
+
+        v
+    }
+    pub(crate) fn new(focus: Option<(&[i32], &Process)>) -> Result<Self, anyhow::Error> {
+        let all = all_processes()?;
+
+        // map from pid to Process
+        let mut procs: HashMap<i32, Process> = HashMap::new();
+
+        // also construct a map that records all of the direct child processes
+        let mut child_map: HashMap<i32, Vec<i32>> = HashMap::new();
+
+        // map from pid to ProcessTreeEntry, which we'll return
+        let mut map: HashMap<i32, ProcessTreeEntry> = HashMap::new();
+
+        for proc in all {
+            child_map.entry(proc.stat.ppid).or_default().push(proc.pid);
+            procs.insert(proc.pid, proc);
+        }
+
+        let root_childgren = child_map.get(&1).unwrap();
+
+        let root_proc = procs.get(&1).unwrap();
+        let mut root = ProcessTreeEntry {
+            pid: root_proc.pid,
+            ppid: 0,
+            cmdline: root_proc
                 .cmdline()
                 .ok()
-                .map_or(p.stat.comm, |cmdline| cmdline.join(" ")),
+                .map_or(root_proc.stat.comm.clone(), |cmdline| cmdline.join(" ")),
+            children: Vec::new(),
+            num_siblings: 0,
         };
-        if p.stat.ppid == proc.stat.pid {
-            children.push(pti);
-        } else {
-            map.insert(p.stat.pid, pti);
+        build_entry(&mut root, &mut map, &procs, &child_map);
+        map.insert(1, root);
+
+        if let Some((parents, focus)) = focus {
+            // it's possible that that `focus` isn't alive.  in that case, keep using the previous
+            // set of pids_to_keep
+            let mut pids_to_keep: Vec<i32> = Vec::from(parents);
+            pids_to_keep.push(focus.pid);
+            if let Some(child_pids) = child_map.get(&focus.pid) {
+                pids_to_keep.extend(child_pids);
+            }
+
+            // starting at the focus, keep all parent pids
+            let mut focus_pid = focus.pid;
+
+            while let Some(entry) = procs.get(&focus_pid) {
+                pids_to_keep.push(entry.stat.ppid);
+                focus_pid = entry.stat.ppid;
+            }
+
+            map.retain(|key, _entry| pids_to_keep.contains(key));
+        }
+
+        Ok(ProcessTree { entries: map })
+    }
+}
+
+fn build_entry(
+    entry: &mut ProcessTreeEntry,
+    entries: &mut HashMap<i32, ProcessTreeEntry>,
+    proc_map: &HashMap<i32, Process>,
+    child_map: &HashMap<i32, Vec<i32>>,
+) {
+    if let Some(child_pids) = child_map.get(&entry.pid) {
+        for child_pid in child_pids {
+            let p = proc_map.get(&child_pid).unwrap();
+            let mut child_entry = ProcessTreeEntry {
+                pid: *child_pid,
+                ppid: entry.pid,
+                cmdline: p
+                    .cmdline()
+                    .ok()
+                    .map_or(p.stat.comm.clone(), |cmdline| cmdline.join(" ")),
+                children: Vec::new(),
+                num_siblings: child_pids.len() as u32,
+            };
+
+            entry.children.push(*child_pid);
+            build_entry(&mut child_entry, entries, proc_map, child_map);
+            entries.insert(*child_pid, child_entry);
         }
     }
-
-    let mut parents = Vec::new();
-    let mut ppid = proc.stat.ppid;
-    while let Some(parent) = map.remove(&ppid) {
-        let new_parent = parent.ppid;
-        parents.push(parent);
-        if ppid == 1 {
-            break;
-        }
-        ppid = new_parent;
-    }
-    parents.reverse();
-
-    (parents, children)
 }
 
 pub(crate) fn limit_to_string(limit: &LimitValue) -> Cow<'static, str> {
@@ -228,7 +311,7 @@ pub(crate) fn lookup_groupname(gid: u32) -> String {
     "???".to_owned()
 }
 
-pub(crate) fn get_pipe_pairs() -> HashMap<u32, (ProcTreeInfo, ProcTreeInfo)> {
+pub(crate) fn get_pipe_pairs() -> HashMap<u32, (ProcessTreeEntry, ProcessTreeEntry)> {
     let mut read_map = HashMap::new();
     let mut write_map = HashMap::new();
 
@@ -237,10 +320,12 @@ pub(crate) fn get_pipe_pairs() -> HashMap<u32, (ProcTreeInfo, ProcTreeInfo)> {
             if let Ok(fds) = proc.fd() {
                 for fd in fds {
                     if let procfs::process::FDTarget::Pipe(uid) = fd.target {
-                        let pti = ProcTreeInfo {
+                        let pti = ProcessTreeEntry {
                             pid: proc.pid,
                             ppid: proc.stat.ppid,
                             cmdline: proc.stat.comm.clone(),
+                            children: Vec::new(),
+                            num_siblings: 0,
                         };
                         if fd.mode().contains(procfs::process::FDPermissions::READ) {
                             read_map.insert(uid, pti);
@@ -319,5 +404,14 @@ mod tests {
 
         let l = super::get_numlines(text.iter(), 5);
         assert_eq!(l, 2);
+    }
+
+    #[test]
+    fn test_proc_all_tree() {
+        let tree = super::ProcessTree::new(None).unwrap();
+        println!("{:#?}", tree);
+        //let me = procfs::process::Process::myself().unwrap();
+        //let all = super::proc_all_tree(Some(&me)).unwrap();
+        //println!("{:#?}", all);
     }
 }
