@@ -25,6 +25,8 @@ pub fn set_panic_handler() {
 
     let old_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
+        let bt = backtrace::Backtrace::new();
+
         // log this panic to disk:
         if let Ok(mut file) = std::fs::OpenOptions::new()
             .write(true)
@@ -47,6 +49,7 @@ pub fn set_panic_handler() {
             if let Some(loc) = info.location() {
                 let _ = writeln!(file, "Location: {}", loc);
             }
+            writeln!(file, "\n{:?}", bt);
         }
         old_hook(info)
     }));
@@ -80,14 +83,14 @@ impl<'a> TabState<'a> {
             self.current_idx -= 1;
         }
     }
-    fn select_by_char(&mut self, c: char) -> bool {
+    fn select_by_char(&mut self, c: char) -> ui::InputResult {
         for (idx, label) in self.labels.iter().enumerate() {
             if label.chars().next() == Some(c) {
                 self.current_idx = idx;
-                return true;
+                return ui::InputResult::NeedsRedraw;
             }
         }
-        false
+        ui::InputResult::None
     }
 }
 
@@ -145,10 +148,14 @@ impl StatDelta<procfs::process::Stat> {
         }
     }
     fn cpu_percentage(&self) -> f32 {
+        let d = self.duration();
+        if d < Duration::from_millis(100) {
+            return 0.0;
+        }
         let cputime_delta = ((self.new.utime - self.old.utime) + (self.new.stime - self.old.stime))
             as f32
             / self.tps as f32;
-        let usage = cputime_delta / (self.duration().as_millis() as f32 / 1000.0);
+        let usage = cputime_delta / (d.as_millis() as f32 / 1000.0);
 
         usage * 100.0
     }
@@ -251,7 +258,8 @@ impl<'a> App<'a> {
             self.proc = proc;
         }
     }
-    fn handle_input(&mut self, input: Key, height: u16) -> bool {
+
+    fn handle_input(&mut self, input: Key, height: u16) -> ui::InputResult {
         let widget_redraw = match self.tab.current_label() {
             ui::EnvWidget::TITLE => self.env_widget.handle_input(input, height),
             ui::NetWidget::TITLE => self.net_widget.handle_input(input, height),
@@ -265,26 +273,26 @@ impl<'a> App<'a> {
                     let new_pid = self.tree_widget.get_selected_pid();
                     if new_pid != self.proc.stat.pid {
                         self.switch_to(new_pid);
-                        return true;
+                        return ui::InputResult::NeedsUpdate;
                     }
                 }
                 self.tree_widget.handle_input(input, height)
             }
-            _ => false,
+            _ => ui::InputResult::None,
         };
         let input_redraw = match input {
             Key::Char('\t') | Key::Right => {
                 self.tab.select_next();
-                true
+                ui::InputResult::NeedsRedraw
             }
             Key::BackTab | Key::Left => {
                 self.tab.select_prev();
-                true
+                ui::InputResult::NeedsRedraw
             }
             Key::Char(c) => self.tab.select_by_char(c),
-            _ => false,
+            _ => ui::InputResult::None,
         };
-        widget_redraw || input_redraw
+        widget_redraw | input_redraw
     }
 
     fn tick(&mut self) {
@@ -560,9 +568,16 @@ fn main() -> anyhow::Result<()> {
             | Ok(Event::Key(Key::Char('q')))
             | Ok(Event::Key(Key::Ctrl('c'))) => break,
 
-            Ok(Event::Key(k)) => {
-                need_redraw = app.handle_input(k, tab_body_height);
-            }
+            Ok(Event::Key(k)) => match app.handle_input(k, tab_body_height) {
+                ui::InputResult::NeedsUpdate => {
+                    need_redraw = true;
+                    app.tick();
+                }
+                ui::InputResult::NeedsRedraw => {
+                    need_redraw = true;
+                }
+                _ => {}
+            },
             Ok(Event::Tick) => {
                 need_redraw = true;
                 app.tick();

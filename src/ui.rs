@@ -24,12 +24,44 @@ const ONE_SECONDS: Duration = Duration::from_secs(1);
 const TWO_SECONDS: Duration = Duration::from_secs(2);
 const TEN_SECONDS: Duration = Duration::from_secs(10);
 
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+pub enum InputResult {
+    /// The widget needs to be redrawn
+    NeedsRedraw,
+    /// The widget needs to be updated with the latest process info (simplies NeedsRedraw)
+    NeedsUpdate,
+    None,
+}
+
+impl From<bool> for InputResult {
+    fn from(b: bool) -> InputResult {
+        if b {
+            InputResult::NeedsRedraw
+        } else {
+            InputResult::None
+        }
+    }
+}
+
+impl std::ops::BitOr for InputResult {
+    type Output = InputResult;
+    fn bitor(self, rhs: Self) -> Self {
+        if self == InputResult::NeedsUpdate || rhs == InputResult::NeedsUpdate {
+            InputResult::NeedsUpdate
+        } else if self == InputResult::NeedsRedraw || rhs == InputResult::NeedsRedraw {
+            InputResult::NeedsRedraw
+        } else {
+            InputResult::None
+        }
+    }
+}
+
 pub trait AppWidget {
     const TITLE: &'static str;
 
     fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect);
     fn update(&mut self, proc: &Process);
-    fn handle_input(&mut self, input: Key, height: u16) -> bool;
+    fn handle_input(&mut self, input: Key, height: u16) -> InputResult;
 }
 
 pub struct ScrollController {
@@ -161,8 +193,8 @@ impl EnvWidget {
 
 impl AppWidget for EnvWidget {
     const TITLE: &'static str = "Env";
-    fn handle_input(&mut self, input: Key, height: u16) -> bool {
-        self.scroll.handle_input(input, height)
+    fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
+        From::from(self.scroll.handle_input(input, height))
     }
 
     fn update(&mut self, proc: &Process) {
@@ -318,8 +350,8 @@ impl AppWidget for NetWidget {
             self.last_updated = Instant::now();
         }
     }
-    fn handle_input(&mut self, input: Key, height: u16) -> bool {
-        self.scroll.handle_input(input, height)
+    fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
+        From::from(self.scroll.handle_input(input, height))
     }
 }
 
@@ -397,8 +429,8 @@ impl AppWidget for MapsWidget {
             self.last_updated = Instant::now();
         }
     }
-    fn handle_input(&mut self, input: Key, height: u16) -> bool {
-        self.scroll.handle_input(input, height)
+    fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
+        From::from(self.scroll.handle_input(input, height))
     }
 }
 
@@ -498,8 +530,8 @@ impl AppWidget for FilesWidget {
             self.pipes_updated = Instant::now();
         }
     }
-    fn handle_input(&mut self, input: Key, height: u16) -> bool {
-        self.scroll.handle_input(input, height)
+    fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
+        From::from(self.scroll.handle_input(input, height))
     }
 }
 
@@ -700,16 +732,15 @@ impl AppWidget for LimitWidget {
             self.last_updated = Instant::now();
         }
     }
-    fn handle_input(&mut self, input: Key, height: u16) -> bool {
-        self.scroll.handle_input(input, height)
+    fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
+        From::from(self.scroll.handle_input(input, height))
     }
 }
 
 pub struct TreeWidget {
     tree: util::ProcessTree,
-    // /// list of processes, in tree order.  (depth, PTI)
-    // flattened: Vec<(u8, util::ProcTreeInfo)>,
     last_updated: Instant,
+    force_update: bool,
     /// The currently selected PID
     selected_pid: i32,
     show_all: bool,
@@ -721,6 +752,7 @@ impl TreeWidget {
         TreeWidget {
             tree,
             show_all: true,
+            force_update: false,
             last_updated: Instant::now(),
             selected_pid: proc.pid,
         }
@@ -825,7 +857,7 @@ impl AppWidget for TreeWidget {
             .render(f, area);
     }
     fn update(&mut self, proc: &Process) {
-        if self.last_updated.elapsed() > TWO_SECONDS {
+        if self.last_updated.elapsed() > TWO_SECONDS || self.force_update {
             // before we update, get a llist of our parents PIDs, all the way up to pid1.
             // After the refresh, our selected process might be gone, so we'll want to instead
             // select its next available parent
@@ -848,6 +880,7 @@ impl AppWidget for TreeWidget {
             })
             .unwrap();
             self.last_updated = Instant::now();
+            self.force_update = false;
 
             if !self.tree.entries.contains_key(&self.selected_pid) {
                 for p in parents {
@@ -859,7 +892,7 @@ impl AppWidget for TreeWidget {
             }
         }
     }
-    fn handle_input(&mut self, input: Key, _height: u16) -> bool {
+    fn handle_input(&mut self, input: Key, _height: u16) -> InputResult {
         let flattened = self.tree.flatten();
         // the current index of the selected pid
         let mut select_idx = flattened
@@ -872,7 +905,8 @@ impl AppWidget for TreeWidget {
         let r = match input {
             Key::Ctrl('t') => {
                 self.show_all = !self.show_all;
-                true
+                self.force_update = true;
+                return InputResult::NeedsUpdate;
             }
             Key::Up => {
                 if select_idx > 0 {
@@ -899,7 +933,7 @@ impl AppWidget for TreeWidget {
                 self.selected_pid = item.pid;
             }
         }
-        r
+        From::from(r)
     }
 }
 
@@ -1118,8 +1152,8 @@ impl AppWidget for CGroupWidget {
             self.last_updated = Instant::now();
         }
     }
-    fn handle_input(&mut self, input: Key, height: u16) -> bool {
-        match input {
+    fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
+        From::from(match input {
             Key::Up => {
                 if self.select_idx > 0 {
                     self.select_idx -= 1;
@@ -1141,7 +1175,7 @@ impl AppWidget for CGroupWidget {
                 }
             }
             _ => false,
-        }
+        })
     }
 }
 
@@ -1340,7 +1374,7 @@ impl AppWidget for IOWidget {
             self.last_updated = Instant::now();
         }
     }
-    fn handle_input(&mut self, _input: Key, _height: u16) -> bool {
-        true
+    fn handle_input(&mut self, _input: Key, _height: u16) -> InputResult {
+        InputResult::NeedsRedraw
     }
 }
