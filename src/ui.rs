@@ -744,6 +744,7 @@ pub struct TreeWidget {
     /// The currently selected PID
     selected_pid: i32,
     show_all: bool,
+    this_pid: i32,
 }
 
 impl TreeWidget {
@@ -755,6 +756,7 @@ impl TreeWidget {
             force_update: false,
             last_updated: Instant::now(),
             selected_pid: proc.pid,
+            this_pid: proc.pid,
         }
     }
     pub fn get_selected_pid(&self) -> i32 {
@@ -766,6 +768,7 @@ impl AppWidget for TreeWidget {
     const TITLE: &'static str = "Tree";
     fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
         let selected_style = Style::default().fg(Color::Magenta);
+        let self_style = Style::default().fg(Color::Yellow);
         let unselected_style = Style::default();
 
         let mut text = Vec::new();
@@ -830,6 +833,8 @@ impl AppWidget for TreeWidget {
                 format!("{} {}\n", item.pid, item.cmdline),
                 if item.pid == self.selected_pid {
                     selected_style
+                } else if item.pid == self.this_pid {
+                    self_style
                 } else {
                     unselected_style
                 },
