@@ -235,7 +235,14 @@ impl Events {
                     Err(..) => return,
                     Ok(TEvent::Key(k)) => kbd_tx.send(self::Event::Key(k)),
                     Ok(TEvent::Mouse(m)) => kbd_tx.send(self::Event::Mouse(m)),
-                    Ok(TEvent::Unsupported(..)) => continue,
+                    Ok(TEvent::Unsupported(bytes)) => match bytes.as_slice() {
+                        // manual parsing of cursor movement keys in application mode
+                        [0x1b, 79, 65] => kbd_tx.send(self::Event::Key(Key::Up)),
+                        [0x1b, 79, 66] => kbd_tx.send(self::Event::Key(Key::Down)),
+                        [0x1b, 79, 67] => kbd_tx.send(self::Event::Key(Key::Right)),
+                        [0x1b, 79, 68] => kbd_tx.send(self::Event::Key(Key::Left)),
+                        _ => continue
+                    }
                 } {
                     return;
                 }
