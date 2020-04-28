@@ -110,10 +110,10 @@ impl ScrollController {
                 Style::default().fg(Color::White).bg(Color::White),
             ),
         ];
-        Paragraph::new(text.iter())
+        let widget = Paragraph::new(text.iter())
             .style(Style::default().fg(Color::White))
-            .wrap(true)
-            .render(f, area)
+            .wrap(true);
+            f.render_widget(widget, area);
         //"·⸱⸳."
     }
     fn set_max_scroll(&mut self, max: i32) {
@@ -231,11 +231,11 @@ impl AppWidget for EnvWidget {
             crate::get_numlines(text.iter(), area.width as usize) as i32 - area.height as i32;
         self.scroll.set_max_scroll(max_scroll);
 
-        Paragraph::new(text.iter())
+        let widget = Paragraph::new(text.iter())
             .block(Block::default().borders(Borders::NONE))
             .wrap(true)
-            .scroll(self.scroll.scroll_offset)
-            .render(f, area);
+            .scroll(self.scroll.scroll_offset);
+        f.render_widget(widget, area);
     }
 }
 
@@ -335,11 +335,11 @@ impl AppWidget for NetWidget {
         let max_scroll =
             crate::get_numlines(text.iter(), area.width as usize) as i32 - area.height as i32;
         self.scroll.set_max_scroll(max_scroll);
-        Paragraph::new(text.iter())
+        let widget = Paragraph::new(text.iter())
             .block(Block::default().borders(Borders::NONE))
             .wrap(false)
-            .scroll(self.scroll.scroll_offset)
-            .render(f, area);
+            .scroll(self.scroll.scroll_offset);
+        f.render_widget(widget, area);
     }
     fn update(&mut self, proc: &Process) {
         if self.last_updated.elapsed() > TWO_SECONDS {
@@ -417,11 +417,11 @@ impl AppWidget for MapsWidget {
             crate::get_numlines(text.iter(), area.width as usize) as i32 - area.height as i32;
         self.scroll.set_max_scroll(max_scroll);
 
-        Paragraph::new(text.iter())
+        let widget = Paragraph::new(text.iter())
             .block(Block::default().borders(Borders::NONE))
             .wrap(false)
-            .scroll(self.scroll.scroll_offset)
-            .render(f, area);
+            .scroll(self.scroll.scroll_offset);
+        f.render_widget(widget, area);
     }
     fn update(&mut self, proc: &Process) {
         if self.last_updated.elapsed() > TWO_SECONDS {
@@ -514,11 +514,11 @@ impl AppWidget for FilesWidget {
             crate::get_numlines(text.iter(), area.width as usize) as i32 - area.height as i32;
         self.scroll.set_max_scroll(max_scroll);
 
-        Paragraph::new(text.iter())
+        let widget = Paragraph::new(text.iter())
             .block(Block::default().borders(Borders::NONE))
             .wrap(false)
-            .scroll(self.scroll.scroll_offset)
-            .render(f, area);
+            .scroll(self.scroll.scroll_offset);
+        f.render_widget(widget, area);
     }
     fn update(&mut self, proc: &Process) {
         if self.last_updated.elapsed() > TWO_SECONDS {
@@ -717,14 +717,14 @@ impl AppWidget for LimitWidget {
             rows
         };
 
-        Table::new(headers.iter(), rows.into_iter())
+        let widget = Table::new(headers.iter(), rows.into_iter())
             .widths(&[
                 Constraint::Length(18),
                 Constraint::Length(12),
                 Constraint::Length(12),
                 Constraint::Length(11),
-            ])
-            .render(f, area);
+            ]);
+        f.render_widget(widget, area);
     }
     fn update(&mut self, proc: &Process) {
         if self.last_updated.elapsed() > TWO_SECONDS {
@@ -855,11 +855,11 @@ impl AppWidget for TreeWidget {
 
         //let max_scroll = get_numlines(text.iter(), area.width as usize) as i32 - area.height as i32;
         //self.set_max_scroll(max_scroll);
-        Paragraph::new(text.iter())
+        let widget = Paragraph::new(text.iter())
             .block(Block::default().borders(Borders::NONE))
             .scroll(scroll as u16)
-            .wrap(false)
-            .render(f, area);
+            .wrap(false);
+        f.render_widget(widget, area);
     }
     fn update(&mut self, proc: &Process) {
         if self.last_updated.elapsed() > TWO_SECONDS || self.force_update {
@@ -1137,16 +1137,16 @@ impl AppWidget for CGroupWidget {
         let max_scroll = std::cmp::max(0, text.len() as i32 - chunks[0].height as i32);
         let scroll = std::cmp::min(std::cmp::max(0, diff), max_scroll as i32);
 
-        Paragraph::new(text.iter())
+        let widget = Paragraph::new(text.iter())
             .block(Block::default().borders(Borders::NONE))
             .wrap(false)
-            .scroll(scroll as u16)
-            .render(f, chunks[0]);
+            .scroll(scroll as u16);
+        f.render_widget(widget, chunks[0]);
 
-        Paragraph::new(details.iter())
+        let widget = Paragraph::new(details.iter())
             .block(Block::default().borders(Borders::LEFT))
-            .wrap(true)
-            .render(f, chunks[1]);
+            .wrap(true);
+        f.render_widget(widget, chunks[1]);
     }
     fn update(&mut self, proc: &Process) {
         if self.last_updated.elapsed() > TEN_SECONDS {
@@ -1157,7 +1157,7 @@ impl AppWidget for CGroupWidget {
             self.last_updated = Instant::now();
         }
     }
-    fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
+    fn handle_input(&mut self, input: Key, _height: u16) -> InputResult {
         From::from(match input {
             Key::Up => {
                 if self.select_idx > 0 {
@@ -1314,10 +1314,10 @@ impl AppWidget for IOWidget {
             //text.push(Text::raw(format!("{} ({})", fmt_bytes(io.read_bytes), fmt_rate(rps))));
         }
 
-        Paragraph::new(text.iter())
+        let widget = Paragraph::new(text.iter())
             .block(Block::default().borders(Borders::NONE))
-            .wrap(true)
-            .render(f, chunks[0]);
+            .wrap(true);
+        f.render_widget(widget, chunks[0]);
 
         // split the right side into 3 areas to draw the sparklines
         //
@@ -1346,11 +1346,11 @@ impl AppWidget for IOWidget {
         {
             let s = std::cmp::max(0, data.len() as i32 - chunks[1].width as i32) as usize;
             let max = std::cmp::max(*max, *data[s..].into_iter().max().unwrap_or(&1) as u64);
-            Sparkline::default()
+            let widget = Sparkline::default()
                 .data(&data[s..])
                 .max(max)
-                .style(Style::default().fg(spark_colors[idx]))
-                .render(f, spark_chunks[idx]);
+                .style(Style::default().fg(spark_colors[idx]));
+            f.render_widget(widget, spark_chunks[idx]);
         }
     }
     fn update(&mut self, _proc: &Process) {

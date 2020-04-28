@@ -341,7 +341,7 @@ impl<'a> App<'a> {
         }
 
         text.push(Text::raw("\u{2500}".repeat(top_area.width as usize)));
-        Paragraph::new(text.iter()).wrap(false).render(f, top_area);
+        f.render_widget(Paragraph::new(text.iter()).wrap(false), top_area);
 
         // top frame is composed of 3 horizontal blocks
         let chunks = Layout::default()
@@ -401,10 +401,10 @@ impl<'a> App<'a> {
         text.push(Text::styled("nice:", s));
         text.push(Text::raw(format!("{} ", self.proc.stat.nice)));
 
-        Paragraph::new(text.iter())
+        let widget = Paragraph::new(text.iter())
             .block(Block::default().borders(Borders::RIGHT))
-            .wrap(true)
-            .render(f, chunks[0]);
+            .wrap(true);
+        f.render_widget(widget, chunks[0]);
 
         // second block is CPU time info
 
@@ -447,22 +447,22 @@ impl<'a> App<'a> {
             }
         }
 
-        Paragraph::new(text.iter())
+        let widget = Paragraph::new(text.iter())
             .block(Block::default().borders(Borders::RIGHT))
-            .wrap(true)
-            .render(f, chunks[1]);
+            .wrap(true);
+        f.render_widget(widget, chunks[1]);
 
         // third block is ????
     }
 
     fn draw_tab_selector<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
-        Tabs::default()
+        let widget = Tabs::default()
             .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
             .titles(self.tab.labels)
             .select(self.tab.current())
             .style(Style::default().fg(Color::Cyan))
-            .highlight_style(Style::default().fg(Color::Yellow))
-            .render(f, area);
+            .highlight_style(Style::default().fg(Color::Yellow));
+        f.render_widget(widget, area);
     }
     fn draw_tab_body<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
         // split this into the body and a scrollbar area
@@ -510,15 +510,15 @@ impl<'a> App<'a> {
         // cpu sparkline (how the last area.width datapoints)
         let data = self.cpu_spark.as_slice();
         let s = std::cmp::max(0, data.len() as i32 - area.width as i32) as usize;
-        Sparkline::default()
+        let widget = Sparkline::default()
             .block(
                 Block::default()
                     .title("Cpu Usage:")
                     .borders(Borders::TOP | Borders::BOTTOM),
             )
             .data(&data[s..])
-            .max(100)
-            .render(f, area);
+            .max(100);
+        f.render_widget(widget, area);
     }
 }
 
