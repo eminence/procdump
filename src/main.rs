@@ -522,9 +522,38 @@ impl<'a> App<'a> {
     }
 }
 
+/// Dedicated input testing mode, to debug terminals that don't report key presses in an expected way
+fn run_keyboard_input_test() -> Result<(), anyhow::Error> {
+    use termion::event::Event as TEvent;
+    use termion::input::TermRead;
+
+    let stdout = std::io::stdout().into_raw_mode()?;
+    let backend = TermionBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+    terminal.hide_cursor()?;
+    terminal.clear()?;
+
+    let stdin = std::io::stdin();
+
+    for evt in stdin.events() {
+        terminal.clear()?;
+        println!("{:?}", evt);
+        if let Ok(TEvent::Key(Key::Char('q'))) = evt {
+            println!();
+            break;
+        }
+    }
+    Ok(())
+}
+
 fn main() -> anyhow::Result<()> {
-    let pid = std::env::args()
-        .nth(1)
+    let args: Vec<_> = std::env::args().collect();
+
+    if args.iter().any(|a| a == "--keytest") {
+        return run_keyboard_input_test();
+    }
+
+    let pid = args.get(1)
         .and_then(|s| i32::from_str_radix(&s, 10).ok());
 
     let prc = if let Some(pid) = pid {
