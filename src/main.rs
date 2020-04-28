@@ -20,12 +20,23 @@ use util::*;
 mod ui;
 use ui::AppWidget;
 
+use std::fmt::Debug;
+
+#[cfg(feature = "backtrace")]
+fn get_backtrace() -> impl Debug {
+    backtrace::Backtrace::new()
+}
+#[cfg(not(feature = "backtrace"))]
+fn get_backtrace() -> impl Debug {
+    "Rebuild with the `backtrace` feature to enable backtraces on panic"
+}
+
 pub fn set_panic_handler() {
     use std::io::Write;
 
     let old_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        let bt = backtrace::Backtrace::new();
+        let bt = get_backtrace();
 
         // log this panic to disk:
         if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -49,7 +60,7 @@ pub fn set_panic_handler() {
             if let Some(loc) = info.location() {
                 let _ = writeln!(file, "Location: {}", loc);
             }
-            writeln!(file, "\n{:?}", bt);
+            let _ = writeln!(file, "\n{:?}", bt);
         }
         old_hook(info)
     }));

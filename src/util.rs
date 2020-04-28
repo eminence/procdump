@@ -68,8 +68,6 @@ impl ProcessTree {
             procs.insert(proc.pid, proc);
         }
 
-        let root_childgren = child_map.get(&1).unwrap();
-
         let root_proc = procs.get(&1).unwrap();
         let mut root = ProcessTreeEntry {
             pid: root_proc.pid,
