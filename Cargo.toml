@@ -1,6 +1,6 @@
 [package]
 name = "procdump"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Andrew Chin <achin@eminence32.net>"]
 description = "A console program to display detailed information about a running process"
 homepage = "https://github.com/eminence/procdump"
