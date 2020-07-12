@@ -4,7 +4,7 @@ use std::fmt::Display;
 use std::sync::mpsc;
 use std::thread;
 
-use procfs::process::{all_processes, LimitValue, Process};
+use procfs::{ProcResult, process::{all_processes, LimitValue, Process}};
 use termion::event::{Key, MouseEvent};
 use tui::widgets::Text;
 
@@ -314,6 +314,15 @@ pub(crate) fn lookup_groupname(gid: u32) -> String {
     }
 
     "???".to_owned()
+}
+
+pub(crate) fn get_locks_for_pid(pid: i32) -> ProcResult<Vec<procfs::Lock>> {
+    procfs::locks().map(|locks| {
+        locks
+            .into_iter()
+            .filter(|lock| lock.pid == Some(pid))
+            .collect::<Vec<_>>()
+    })
 }
 
 pub(crate) fn get_pipe_pairs() -> HashMap<u32, (ProcessTreeEntry, ProcessTreeEntry)> {

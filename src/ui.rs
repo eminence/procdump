@@ -1,12 +1,13 @@
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::ffi::OsString;
+use std::ffi::{CString, OsString};
 use std::iter::FromIterator;
+use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use procfs::net::{TcpNetEntry, UdpNetEntry, UnixNetEntry};
-use procfs::process::{FDInfo, Process};
+use procfs::process::{FDInfo, FDTarget, Process};
 use procfs::ProcessCgroup;
 use procfs::{ProcError, ProcResult};
 use termion::event::Key;
@@ -436,6 +437,7 @@ impl AppWidget for MapsWidget {
 
 pub struct FilesWidget {
     fds: ProcResult<Vec<procfs::process::FDInfo>>,
+    locks: ProcResult<Vec<procfs::Lock>>,
     pipe_inodes: HashMap<u32, (util::ProcessTreeEntry, util::ProcessTreeEntry)>,
     last_updated: Instant,
     pipes_updated: Instant,
@@ -446,6 +448,7 @@ impl FilesWidget {
     pub fn new(proc: &Process) -> FilesWidget {
         FilesWidget {
             fds: proc.fd(),
+            locks: util::get_locks_for_pid(proc.pid),
             last_updated: Instant::now(),
             pipe_inodes: util::get_pipe_pairs(),
             pipes_updated: Instant::now(),
@@ -463,15 +466,37 @@ impl AppWidget for FilesWidget {
         let mut text = Vec::new();
         match self.fds {
             Ok(ref fds) => {
-                use procfs::process::FDTarget;
                 let fd_style = Style::default().fg(Color::Green);
                 for fd in fds {
                     text.push(Text::styled(format!("{: <3} ", fd.fd), fd_style));
                     match &fd.target {
-                        FDTarget::Path(path) => text.push(Text::styled(
-                            format!("{}", path.display()),
-                            Style::default().fg(Color::Magenta),
-                        )),
+                        FDTarget::Path(path) => {
+                            text.push(Text::styled(
+                                format!("{}", path.display()),
+                                Style::default().fg(Color::Magenta),
+                            ));
+
+                            // get the inode and device for this path to see if it is locked
+                            let cstr = CString::new(path.as_os_str().as_bytes()).unwrap();
+                            let mut stat = unsafe { std::mem::zeroed() };
+                            if unsafe { libc::stat(cstr.as_ptr(), &mut stat) } == 0 {
+                                if let Ok(locks) = &self.locks {
+                                    if let Some(lock) = locks.iter().find(|lock| {
+                                        let lock_dev =
+                                            unsafe { libc::makedev(lock.devmaj, lock.devmin) };
+                                        lock.inode == stat.st_ino && stat.st_dev == lock_dev
+                                    }) {
+                                        text.push(Text::styled(
+                                            format!(
+                                                " ({:?} {:?} {:?})",
+                                                lock.lock_type, lock.mode, lock.kind
+                                            ),
+                                            Style::default().modifier(Modifier::DIM),
+                                        ));
+                                    }
+                                }
+                            }
+                        }
                         FDTarget::Pipe(inode) => {
                             text.push(Text::styled(
                                 format!("pipe: {}", inode),
@@ -523,6 +548,7 @@ impl AppWidget for FilesWidget {
     fn update(&mut self, proc: &Process) {
         if self.last_updated.elapsed() > TWO_SECONDS {
             self.fds = proc.fd();
+            self.locks = util::get_locks_for_pid(proc.pid);
             self.last_updated = Instant::now();
         }
         if self.pipes_updated.elapsed() > TEN_SECONDS {
