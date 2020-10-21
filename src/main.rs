@@ -221,6 +221,7 @@ pub struct App<'a> {
     tree_widget: ui::TreeWidget,
     cgroup_widget: ui::CGroupWidget,
     io_widget: ui::IOWidget,
+    task_widget: ui::TaskWidget,
     tab: TabState<'a>,
     stat_d: StatDelta<procfs::process::Stat>,
     cpu_spark: SparklineData,
@@ -237,6 +238,7 @@ impl<'a> App<'a> {
             tree_widget: ui::TreeWidget::new(&proc),
             cgroup_widget: ui::CGroupWidget::new(&proc),
             io_widget: ui::IOWidget::new(&proc),
+            task_widget: ui::TaskWidget::new(&proc),
             tps: procfs::ticks_per_second().unwrap(),
             stat_d: StatDelta::<procfs::process::Stat>::new(proc.clone()),
             tab: TabState::new(&[
@@ -248,6 +250,7 @@ impl<'a> App<'a> {
                 ui::TreeWidget::TITLE,
                 ui::CGroupWidget::TITLE,
                 ui::IOWidget::TITLE,
+                ui::TaskWidget::TITLE,
             ]),
             cpu_spark: SparklineData::new(),
             proc,
@@ -263,6 +266,7 @@ impl<'a> App<'a> {
             self.limit_widget = ui::LimitWidget::new(&proc);
             self.tree_widget = ui::TreeWidget::new(&proc);
             self.cgroup_widget = ui::CGroupWidget::new(&proc);
+            self.task_widget = ui::TaskWidget::new(&proc);
             self.io_widget = ui::IOWidget::new(&proc);
             self.stat_d = StatDelta::<procfs::process::Stat>::new(proc.clone());
             self.cpu_spark = SparklineData::new();
@@ -279,6 +283,7 @@ impl<'a> App<'a> {
             ui::LimitWidget::TITLE => self.limit_widget.handle_input(input, height),
             ui::CGroupWidget::TITLE => self.cgroup_widget.handle_input(input, height),
             ui::IOWidget::TITLE => self.io_widget.handle_input(input, height),
+            ui::TaskWidget::TITLE => self.task_widget.handle_input(input, height),
             ui::TreeWidget::TITLE => {
                 if input == Key::Char('\n') {
                     let new_pid = self.tree_widget.get_selected_pid();
@@ -315,6 +320,7 @@ impl<'a> App<'a> {
             self.tree_widget.update(&self.proc);
             self.cgroup_widget.update(&self.proc);
             self.io_widget.update(&self.proc);
+            self.task_widget.update(&self.proc);
             self.stat_d.update();
 
             let cpu_usage = self.stat_d.cpu_percentage();
@@ -501,6 +507,11 @@ impl<'a> App<'a> {
             ui::IOWidget::TITLE => {
                 self.io_widget.draw(f, area);
             }
+            ui::TaskWidget::TITLE => {
+                self.task_widget.draw(f, area);
+                self.task_widget.draw_scrollbar(f, chunks[1]);
+
+            }
             t => {
                 panic!("Unhandled tab {}", t);
             }
@@ -553,8 +564,7 @@ fn main() -> anyhow::Result<()> {
         return run_keyboard_input_test();
     }
 
-    let pid = args.get(1)
-        .and_then(|s| i32::from_str_radix(&s, 10).ok());
+    let pid = args.get(1).and_then(|s| i32::from_str_radix(&s, 10).ok());
 
     let prc = if let Some(pid) = pid {
         procfs::process::Process::new(pid).unwrap()

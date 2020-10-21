@@ -20,6 +20,7 @@ use tui::widgets::*;
 use crate::util;
 use crate::util::{fmt_bytes, fmt_rate, limit_to_string};
 use crate::{SparklineData, StatDelta};
+use indexmap::IndexMap;
 
 const ONE_SECONDS: Duration = Duration::from_secs(1);
 const TWO_SECONDS: Duration = Duration::from_secs(2);
@@ -114,7 +115,7 @@ impl ScrollController {
         let widget = Paragraph::new(text.iter())
             .style(Style::default().fg(Color::White))
             .wrap(true);
-            f.render_widget(widget, area);
+        f.render_widget(widget, area);
         //"·⸱⸳."
     }
     fn set_max_scroll(&mut self, max: i32) {
@@ -743,13 +744,12 @@ impl AppWidget for LimitWidget {
             rows
         };
 
-        let widget = Table::new(headers.iter(), rows.into_iter())
-            .widths(&[
-                Constraint::Length(18),
-                Constraint::Length(12),
-                Constraint::Length(12),
-                Constraint::Length(11),
-            ]);
+        let widget = Table::new(headers.iter(), rows.into_iter()).widths(&[
+            Constraint::Length(18),
+            Constraint::Length(12),
+            Constraint::Length(12),
+            Constraint::Length(11),
+        ]);
         f.render_widget(widget, area);
     }
     fn update(&mut self, proc: &Process) {
@@ -1407,5 +1407,104 @@ impl AppWidget for IOWidget {
     }
     fn handle_input(&mut self, _input: Key, _height: u16) -> InputResult {
         InputResult::NeedsRedraw
+    }
+}
+
+struct TaskData {
+    task: procfs::process::Task,
+    io: procfs::process::Io,
+    stat: procfs::process::Stat
+}
+impl TaskData {
+    fn new(task: procfs::process::Task) -> Option<Self> {
+        match (task.io(), task.stat()) {
+            (Ok(io), Ok(stat)) => {
+                Some(TaskData {
+                    task, io, stat
+                })
+            }
+            _ => None
+        }
+    }
+}
+pub struct TaskWidget {
+    last_updated: Instant,
+    tasks: ProcResult<IndexMap<i32, TaskData>>,
+    last_tasks: Option<IndexMap<i32, TaskData>>,
+    scroll: ScrollController,
+}
+impl TaskWidget {
+    pub fn new(proc: &Process) -> TaskWidget {
+        let tasks = proc
+            .tasks()
+            .map(|i| i.filter_map(|t| t.ok())
+                .filter_map(|t| {
+                    let tid = t.tid;
+                    TaskData::new(t).map(|td| (tid, td))
+                }))
+            .map(|i| IndexMap::from_iter(i));
+
+        TaskWidget {
+            last_updated: Instant::now(),
+            tasks,
+            last_tasks: None,
+            scroll: ScrollController::new(),
+        }
+    }
+    pub fn draw_scrollbar<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+        self.scroll.draw_scrollbar(f, area)
+    }
+}
+impl AppWidget for TaskWidget {
+    const TITLE: &'static str = "Task";
+    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+        let mut text = Vec::new();
+
+        if let Ok(tasks) = &self.tasks {
+            for task in tasks.values() {
+                let name = &task.stat.comm;
+
+                let cpu_str = if let Some(prev) = self.last_tasks.as_ref().and_then(|map| map.get(&task.task.tid)) {
+                    let diff = task.stat.utime - prev.stat.utime;
+                    format!("{:.1}%", diff as f64 / 2.0 ) 
+                } else {
+                    format!("??%")
+                };
+
+                text.push(Text::raw(format!("({:<16}) {:<5} {}\n", name, task.task.tid, cpu_str)));
+            }
+        } else {
+            text.push(Text::raw(format!("Error reading tasks")));
+        }
+
+        let max_scroll =
+            crate::get_numlines(text.iter(), area.width as usize) as i32 - area.height as i32;
+        self.scroll.set_max_scroll(max_scroll);
+
+        let widget = Paragraph::new(text.iter())
+            .block(Block::default().borders(Borders::NONE))
+            .wrap(false)
+            .scroll(self.scroll.scroll_offset);
+        f.render_widget(widget, area);
+    }
+    fn update(&mut self, proc: &Process) {
+        if self.last_updated.elapsed() > TWO_SECONDS {
+            let mut new_tasks = proc
+            .tasks()
+            .map(|i| i.filter_map(|t| t.ok())
+                .filter_map(|t| {
+                    let tid = t.tid;
+                    TaskData::new(t).map(|td| (tid, td))
+                }))
+            .map(|i| IndexMap::from_iter(i));
+            std::mem::swap(&mut new_tasks, &mut self.tasks);
+            // "new_tasks" now contains the "old_tasks"
+            self.last_tasks = new_tasks.ok();
+
+            self.last_updated = Instant::now();
+        }
+    }
+    fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
+        From::from(self.scroll.handle_input(input, height))
     }
 }

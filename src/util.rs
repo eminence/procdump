@@ -4,7 +4,10 @@ use std::fmt::Display;
 use std::sync::mpsc;
 use std::thread;
 
-use procfs::{ProcResult, process::{all_processes, LimitValue, Process}};
+use procfs::{
+    process::{all_processes, LimitValue, Process},
+    ProcResult,
+};
 use termion::event::{Key, MouseEvent};
 use tui::widgets::Text;
 
@@ -226,7 +229,7 @@ impl Events {
         // spawn a thread to handle keyboard input
         let (tx, rx) = mpsc::channel();
         let kbd_tx = tx.clone();
-        thread::spawn(move || {
+        thread::Builder::new().name("kbd-reader".to_owned()).spawn(move || {
             use termion::event::Event as TEvent;
             use termion::input::TermRead;
             let stdin = std::io::stdin();
@@ -241,20 +244,20 @@ impl Events {
                         [0x1b, 79, 66] => kbd_tx.send(self::Event::Key(Key::Down)),
                         [0x1b, 79, 67] => kbd_tx.send(self::Event::Key(Key::Right)),
                         [0x1b, 79, 68] => kbd_tx.send(self::Event::Key(Key::Left)),
-                        _ => continue
-                    }
+                        _ => continue,
+                    },
                 } {
                     return;
                 }
             }
-        });
+        }).unwrap();
 
-        thread::spawn(move || loop {
+        thread::Builder::new().name("tick".to_owned()).spawn(move || loop {
             thread::sleep(std::time::Duration::from_millis(1500));
             if let Err(..) = tx.send(self::Event::Tick) {
                 return;
             }
-        });
+        }).unwrap();
 
         Events { rx }
     }
