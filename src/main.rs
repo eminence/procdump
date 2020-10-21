@@ -3,17 +3,13 @@ use std::time::{Duration, Instant};
 use procfs::process::Process;
 use termion::event::Key;
 use termion::raw::IntoRawMode;
-use tui::backend::{Backend, TermionBackend};
+use tui::{backend::{Backend, TermionBackend}, text::{Span, Spans}};
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::*;
 use tui::terminal::{Frame, Terminal};
 use tui::widgets::*;
 
-pub const ERROR_STYLE: Style = Style {
-    fg: Color::Red,
-    bg: Color::Reset,
-    modifier: Modifier::empty(),
-};
+// pub const ERROR_STYLE: Style = Style::default().fg(Color::Red).bg(Color::Reset);
 
 mod util;
 use util::*;
@@ -334,20 +330,20 @@ impl<'a> App<'a> {
         if let Ok(cmdline) = self.proc.cmdline() {
             let mut i = cmdline.into_iter();
             if let Some(exe) = i.next() {
-                text.push(Text::raw("\u{2500} "));
-                text.push(Text::styled(exe, Style::default().fg(Color::Magenta)));
-                text.push(Text::raw(" "));
+                text.push(Span::raw("\u{2500} "));
+                text.push(Span::styled(exe, Style::default().fg(Color::Magenta)));
+                text.push(Span::raw(" "));
             }
             for arg in i {
-                text.push(Text::raw(arg));
-                text.push(Text::raw(" "));
+                text.push(Span::raw(arg));
+                text.push(Span::raw(" "));
             }
         } else {
-            text.push(Text::raw(format!("\u{2500} {} ", self.proc.stat.comm)));
+            text.push(Span::raw(format!("\u{2500} {} ", self.proc.stat.comm)));
         }
 
-        text.push(Text::raw("\u{2500}".repeat(top_area.width as usize)));
-        f.render_widget(Paragraph::new(text.iter()).wrap(false), top_area);
+        text.push(Span::raw("\u{2500}".repeat(top_area.width as usize)));
+        f.render_widget(Paragraph::new(Spans::from(text)), top_area);
 
         // top frame is composed of 3 horizontal blocks
         let chunks = Layout::default()
@@ -365,106 +361,142 @@ impl<'a> App<'a> {
 
         // first block is basic state info
         let s = Style::default().fg(Color::Green);
-        let mut text = Vec::new();
-        text.push(Text::styled("pid:", s));
-        text.push(Text::raw(format!("{} ", self.proc.stat.pid)));
-        text.push(Text::styled("ppid:", s));
-        text.push(Text::raw(format!("{} ", self.proc.stat.ppid)));
-        text.push(Text::styled("pgrp:", s));
-        text.push(Text::raw(format!("{} ", self.proc.stat.pgrp)));
-        text.push(Text::styled("session:", s));
-        text.push(Text::raw(format!("{} \n", self.proc.stat.session)));
+        let mut text: Vec<Spans> = Vec::new();
+        
+        // first line:
+        // pid:19610 ppid:8959 pgrp:19610 session:8959
+        text.push(Spans::from(vec![
+            Span::styled("pid:", s),
+            Span::raw(format!("{} ", self.proc.stat.pid)),
+            Span::styled("ppid:", s),
+            Span::raw(format!("{} ", self.proc.stat.ppid)),
+            Span::styled("pgrp:", s),
+            Span::raw(format!("{} ", self.proc.stat.pgrp)),
+            Span::styled("session:", s),
+            Span::raw(format!("{}", self.proc.stat.session))
+        ]));
 
-        text.push(Text::styled("state:", s));
-        if self.proc.is_alive() {
-            text.push(Text::raw(format!(
-                "{} ({:?}) ",
-                self.proc.stat.state,
-                self.proc.stat.state().unwrap()
-            )));
-        } else {
-            text.push(Text::raw(format!("X (Dead) ")));
-        }
-        text.push(Text::styled("started:", s));
-        if let Ok(dt) = self.proc.stat.starttime() {
-            text.push(Text::raw(format!("{}\n", fmt_time(dt))));
-        } else {
-            text.push(Text::styled("(unknown)\n", ERROR_STYLE));
-        }
+        // second line:
+        // state:X (Dead) started:23:14:28
+        text.push(Spans::from(vec![
+            Span::styled("state:", s),
+            if self.proc.is_alive() {
+                Span::raw(format!(
+                    "{} ({:?}) ",
+                    self.proc.stat.state,
+                    self.proc.stat.state().unwrap()
+                ))
+            } else {
+                Span::raw(format!("X (Dead) "))
+            },
+
+            Span::styled("started:", s),
+            if let Ok(dt) = self.proc.stat.starttime() {
+                Span::raw(format!("{}\n", fmt_time(dt)))
+            } else {
+                Span::styled("(unknown)\n", Style::default().fg(Color::Red).bg(Color::Reset))
+            }
+        ]));
+
+        // third line:
+        // owner:achin(1000) threads:
 
         let status = self.proc.status();
         if let Ok(ref status) = status {
-            text.push(Text::styled("owner:", s));
-            text.push(Text::raw(format!(
-                "{}({}) ",
-                lookup_username(status.ruid),
-                status.ruid
-            )));
-
-            text.push(Text::styled("threads:", s));
-            text.push(Text::raw(format!("{}\n", status.threads)));
+            text.push(Spans::from(vec![
+                Span::styled("owner:", s),
+                Span::raw(format!(
+                    "{}({}) ",
+                    lookup_username(status.ruid),
+                    status.ruid
+                )),
+                Span::styled("threads:", s),
+                Span::raw(format!("{}\n", status.threads))
+            ]));
         }
-        text.push(Text::styled("nice:", s));
-        text.push(Text::raw(format!("{} ", self.proc.stat.nice)));
 
-        let widget = Paragraph::new(text.iter())
-            .block(Block::default().borders(Borders::RIGHT))
-            .wrap(true);
+        // forth line:
+        // nice:0
+
+        text.push(Spans::from(vec![
+            Span::styled("nice:", s),
+            Span::raw(format!("{} ", self.proc.stat.nice))
+        ]));
+
+        let widget = Paragraph::new(text)
+            .block(Block::default().borders(Borders::RIGHT));
         f.render_widget(widget, chunks[0]);
 
         // second block is CPU time info
 
-        let mut text = Vec::new();
+        let mut text: Vec<Spans> = Vec::new();
         let stat = self.stat_d.latest();
         let u_time = Duration::from_millis(stat.utime * (1000.0 / self.tps as f32) as u64);
         let s_time = Duration::from_millis(stat.stime * (1000.0 / self.tps as f32) as u64);
 
         let usage = self.stat_d.cpu_percentage();
 
-        text.push(Text::styled("cpu usage:", s));
-        text.push(Text::raw(format!("{:.2}%\n", usage)));
+        // first line:
+        // cpu usage:0.00%
+        text.push(Spans::from(vec![
+            Span::styled("cpu usage:", s),
+            Span::raw(format!("{:.2}%", usage))
+        ]));
 
-        text.push(Text::styled("user time:", s));
-        text.push(Text::raw(format!("{:?} ", u_time)));
-        text.push(Text::styled("kernel time:", s));
-        text.push(Text::raw(format!("{:?} ", s_time)));
-
-        // how much time is in userland
+        // second line:
+        // │user time:70ms kernel time:10ms u/k:87.50%
         let percent_user = stat.utime as f32 / (stat.utime + stat.stime) as f32;
-        text.push(Text::styled("u/k:", s));
-        text.push(Text::raw(format!("{:.2}%\n", percent_user * 100.0)));
+
+        text.push(Spans::from(vec![
+
+            Span::styled("user time:", s),
+            Span::raw(format!("{:?} ", u_time)),
+            Span::styled("kernel time:", s),
+            Span::raw(format!("{:?} ", s_time)),
+    
+            // how much time is in userland
+            Span::styled("u/k:", s),
+            Span::raw(format!("{:.2}%\n", percent_user * 100.0)),
+        ]));
+
+        // third line:
+        // virt:12.14 MB rss:5.55 MB shr:3.46 MB
+
+        let mut line: Vec<Span> = Vec::new();
+      
 
         if let Ok(ref status) = status {
             // get some memory stats
             if let Some(vmsize) = status.vmsize {
-                text.push(Text::styled("virt:", s));
-                text.push(Text::raw(format!("{} ", fmt_bytes(vmsize * 1024, "B"))));
+                line.push(Span::styled("virt:", s));
+                line.push(Span::raw(format!("{} ", fmt_bytes(vmsize * 1024, "B"))));
             }
             if let Some(rss) = status.vmrss {
-                text.push(Text::styled("rss:", s));
-                text.push(Text::raw(format!("{} ", fmt_bytes(rss * 1024, "B"))));
+                line.push(Span::styled("rss:", s));
+                line.push(Span::raw(format!("{} ", fmt_bytes(rss * 1024, "B"))));
             }
             if let (Some(shr), Some(rss)) = (status.rssshmem, status.rssfile) {
-                text.push(Text::styled("shr:", s));
-                text.push(Text::raw(format!(
+                line.push(Span::styled("shr:", s));
+                line.push(Span::raw(format!(
                     "{} ",
                     fmt_bytes((shr + rss) * 1024, "B")
                 )));
             }
         }
+        text.push(Spans::from(line));
 
-        let widget = Paragraph::new(text.iter())
-            .block(Block::default().borders(Borders::RIGHT))
-            .wrap(true);
+        let widget = Paragraph::new(text)
+            .block(Block::default().borders(Borders::RIGHT));
         f.render_widget(widget, chunks[1]);
 
         // third block is ????
     }
 
     fn draw_tab_selector<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
-        let widget = Tabs::default()
+        let titles = self.tab.labels.iter().cloned().map(Spans::from).collect();
+        let widget = Tabs::new(titles)
             .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
-            .titles(self.tab.labels)
+            // .titles(self.tab.labels)
             .select(self.tab.current())
             .style(Style::default().fg(Color::Cyan))
             .highlight_style(Style::default().fg(Color::Yellow));

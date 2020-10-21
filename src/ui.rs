@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, fs::read_to_string};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::ffi::{CString, OsString};
 use std::iter::FromIterator;
@@ -6,12 +6,12 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use procfs::net::{TcpNetEntry, UdpNetEntry, UnixNetEntry};
+use procfs::{process::MMapPath, net::{TcpNetEntry, UdpNetEntry, UnixNetEntry}};
 use procfs::process::{FDInfo, FDTarget, Process};
 use procfs::ProcessCgroup;
 use procfs::{ProcError, ProcResult};
 use termion::event::Key;
-use tui::backend::Backend;
+use tui::{backend::Backend, text::{Span, Spans}};
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::*;
 use tui::terminal::Frame;
@@ -88,33 +88,28 @@ impl ScrollController {
         assert!(rest >= 0.0 && rest <= 1.0, "rest={} p={}", rest, p);
         //let symbols = "·⸱⸳.";
         let symbols = "\u{2588}\u{2587}\u{2586}\u{2585}\u{2584}\u{2583}\u{2582}\u{2581} "; // "█▇▆▅▄▃▂▁";
-        let text = [
-            Text::styled(
-                "_".repeat(whole as usize),
-                Style::default().fg(Color::Magenta).bg(Color::Magenta),
-            ),
-            {
-                let idx = (rest * (symbols.chars().count() - 1) as f32).round() as usize;
-                //assert!(idx <= 3, "idx={} rest={} len={}", idx, rest, symbols.chars().count());
-                let c = symbols.chars().nth(idx);
-                assert!(c.is_some(), "idx={}", idx);
-                let c = c.unwrap();
-                let fg = if c.is_whitespace() {
-                    Color::Magenta
-                } else {
-                    Color::White
-                };
-                let s = format!("{}", if c.is_whitespace() { '+' } else { c });
-                Text::styled(s, Style::default().fg(fg).bg(Color::Magenta))
-            },
-            Text::styled(
-                "_".repeat(area.height as usize),
-                Style::default().fg(Color::White).bg(Color::White),
-            ),
-        ];
-        let widget = Paragraph::new(text.iter())
-            .style(Style::default().fg(Color::White))
-            .wrap(true);
+        let mut text: Vec<Spans> = Vec::new();
+        text.resize(text.len() + whole as usize, Spans::from(Span::styled("_", Style::default().fg(Color::Magenta).bg(Color::Magenta))));
+        {
+            let idx = (rest * (symbols.chars().count() - 1) as f32).round() as usize;
+            //assert!(idx <= 3, "idx={} rest={} len={}", idx, rest, symbols.chars().count());
+            let c = symbols.chars().nth(idx);
+            assert!(c.is_some(), "idx={}", idx);
+            let c = c.unwrap();
+            let fg = if c.is_whitespace() {
+                Color::Magenta
+            } else {
+                Color::White
+            };
+            let s = format!("{}", if c.is_whitespace() { '+' } else { c });
+            text.push(Spans::from(Span::styled(s, Style::default().fg(fg).bg(Color::Magenta))));
+            
+        }
+        text.resize(text.len() + area.height as usize, Spans::from(Span::styled("_", Style::default().fg(Color::White).bg(Color::White))));
+        
+       
+        let widget = Paragraph::new(text)
+            .style(Style::default().fg(Color::White));
         f.render_widget(widget, area);
         //"·⸱⸳."
     }
@@ -206,37 +201,38 @@ impl AppWidget for EnvWidget {
         }
     }
     fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
-        let mut text = Vec::new();
+        let mut text: Vec<Spans> = Vec::new();
 
         match &self.env {
             Err(e) => {
-                text.push(Text::styled(
+                text.push(From::from(Span::styled(
                     format!("Error getting environment: {}", e),
-                    crate::ERROR_STYLE,
-                ));
+                    Style::default().fg(Color::Red).bg(Color::Reset),
+                )));
             }
             Ok(map) => {
                 let mut keys: Vec<_> = map.keys().collect();
                 keys.sort_unstable();
                 for key in keys {
-                    text.push(Text::styled(
-                        key.to_string_lossy().into_owned(),
-                        Style::default().fg(Color::Green),
-                    ));
-                    text.push(Text::styled("=", Style::default().fg(Color::Green)));
-                    text.push(Text::raw(map[key].to_string_lossy().into_owned()));
-                    text.push(Text::raw("\n"));
+                    text.push(Spans::from(vec![
+                        Span::styled(
+                            key.to_string_lossy().into_owned(),
+                            Style::default().fg(Color::Green),
+                        ),
+                        Span::styled("=", Style::default().fg(Color::Green)),
+                        Span::raw(map[key].to_string_lossy().into_owned())
+                    ]));
                 }
             }
         }
         let max_scroll =
-            crate::get_numlines(text.iter(), area.width as usize) as i32 - area.height as i32;
+            crate::get_numlines_from_spans(text.iter(), area.width as usize) as i32 - area.height as i32;
         self.scroll.set_max_scroll(max_scroll);
 
-        let widget = Paragraph::new(text.iter())
+        let widget = Paragraph::new(text)
             .block(Block::default().borders(Borders::NONE))
-            .wrap(true)
-            .scroll(self.scroll.scroll_offset);
+            .wrap(Wrap { trim: true })
+            .scroll((self.scroll.scroll_offset, 0));
         f.render_widget(widget, area);
     }
 }
@@ -269,7 +265,7 @@ impl NetWidget {
 impl AppWidget for NetWidget {
     const TITLE: &'static str = "Net";
     fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
-        let mut text: Vec<Text> = Vec::new();
+        let mut text: Vec<Spans> = Vec::new();
 
         match &self.fd {
             Ok(fd) => {
@@ -277,42 +273,50 @@ impl AppWidget for NetWidget {
                     match fd.target {
                         procfs::process::FDTarget::Socket(inode) => {
                             if let Some(entry) = self.tcp_map.get(&inode) {
-                                text.push(Text::styled(
-                                    "[tcp] ",
-                                    Style::default().fg(Color::Green),
-                                ));
-                                text.push(Text::raw(format!(
-                                    " {} -> {} ({:?})\n",
-                                    entry.local_address, entry.remote_address, entry.state
-                                )));
+                                text.push(Spans::from(vec![
+                                    Span::styled(
+                                        "[tcp] ",
+                                        Style::default().fg(Color::Green),
+                                    ),
+                                    Span::raw(format!(
+                                        " {} -> {} ({:?})",
+                                        entry.local_address, entry.remote_address, entry.state
+                                    ))
+                                ]));
                             }
                             if let Some(entry) = self.udp_map.get(&inode) {
-                                text.push(Text::styled("[udp] ", Style::default().fg(Color::Blue)));
-                                text.push(Text::raw(format!(
-                                    " {} -> {} ({:?})\n",
-                                    entry.local_address, entry.remote_address, entry.state
-                                )));
+                                text.push(Spans::from(vec![
+                                    Span::styled("[udp] ", Style::default().fg(Color::Blue)),
+                                    Span::raw(format!(
+                                        " {} -> {} ({:?})",
+                                        entry.local_address, entry.remote_address, entry.state
+                                    ))
+                                ]));
+                               
                             }
                             if let Some(entry) = self.unix_map.get(&inode) {
-                                text.push(Text::styled(
-                                    "[unix]",
-                                    Style::default().fg(Color::Yellow),
-                                ));
-                                text.push(Text::raw(match entry.socket_type as i32 {
-                                    libc::SOCK_STREAM => " STREAM    ",
-                                    libc::SOCK_DGRAM => " DGRAM     ",
-                                    libc::SOCK_SEQPACKET => " SEQPACKET ",
-                                    _ => "           ",
-                                }));
-                                if let Some(path) = &entry.path {
-                                    text.push(Text::raw(format!(" {}", path.display())));
-                                } else {
-                                    text.push(Text::styled(
-                                        " (no socket path)",
-                                        Style::default().fg(Color::Gray),
-                                    ));
-                                }
-                                text.push(Text::raw(format!(" ({:?})\n", entry.state)));
+                                text.push(Spans::from(vec![
+                                    Span::styled(
+                                        "[unix]",
+                                        Style::default().fg(Color::Yellow),
+                                    ),
+                                    Span::raw(match entry.socket_type as i32 {
+                                        libc::SOCK_STREAM => " STREAM    ",
+                                        libc::SOCK_DGRAM => " DGRAM     ",
+                                        libc::SOCK_SEQPACKET => " SEQPACKET ",
+                                        _ => "           ",
+                                    }),
+                                    if let Some(path) = &entry.path {
+                                        Span::raw(format!(" {}", path.display()))
+                                    } else {
+                                        Span::styled(
+                                            " (no socket path)",
+                                            Style::default().fg(Color::Gray),
+                                        )
+                                    },
+                                    Span::raw(format!(" ({:?})\n", entry.state))
+                                ]));
+                                
                             }
                         }
                         _ => {}
@@ -320,27 +324,26 @@ impl AppWidget for NetWidget {
                 }
             }
             Err(e) => {
-                text.push(Text::styled(
+                text.push(Spans::from(Span::styled(
                     format!("Error getting network connections: {}", e),
-                    crate::ERROR_STYLE,
-                ));
+                    Style::default().fg(Color::Red).bg(Color::Reset),
+                )));
             }
         }
 
         if text.is_empty() {
-            text.push(Text::styled(
+            text.push(Spans::from(Span::styled(
                 "(no network connections)",
-                Style::default().fg(Color::Gray).modifier(Modifier::DIM),
-            ));
+                Style::default().fg(Color::Gray).add_modifier(Modifier::DIM),
+            )));
         }
 
         let max_scroll =
-            crate::get_numlines(text.iter(), area.width as usize) as i32 - area.height as i32;
+            crate::get_numlines_from_spans(text.iter(), area.width as usize) as i32 - area.height as i32;
         self.scroll.set_max_scroll(max_scroll);
-        let widget = Paragraph::new(text.iter())
+        let widget = Paragraph::new(text)
             .block(Block::default().borders(Borders::NONE))
-            .wrap(false)
-            .scroll(self.scroll.scroll_offset);
+            .scroll((self.scroll.scroll_offset, 0));
         f.render_widget(widget, area);
     }
     fn update(&mut self, proc: &Process) {
@@ -379,19 +382,20 @@ impl MapsWidget {
 impl AppWidget for MapsWidget {
     const TITLE: &'static str = "Maps";
     fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
-        let mut text = Vec::new();
+        let mut text: Vec<Spans> = Vec::new();
         match &self.maps {
             Ok(maps) => {
-                use procfs::process::MMapPath;
                 for map in maps {
-                    text.push(Text::raw(format!(
-                        "0x{:012x}-0x{:012x} ",
-                        map.address.0, map.address.1
-                    )));
-                    text.push(Text::raw(format!("{} ", map.perms)));
-                    text.push(Text::raw(format!("0x{: <8x} ", map.offset)));
+                    let mut line = vec![
+                        Span::raw(format!(
+                            "0x{:012x}-0x{:012x} ",
+                            map.address.0, map.address.1
+                        )),
+                        Span::raw(format!("{} ", map.perms)),
+                        Span::raw(format!("0x{: <8x} ", map.offset))
+                    ];
                     match &map.pathname {
-                        MMapPath::Path(path) => text.push(Text::styled(
+                        MMapPath::Path(path) => line.push(Span::styled(
                             format!("{}\n", path.display()),
                             Style::default().fg(Color::Magenta),
                         )),
@@ -400,29 +404,29 @@ impl AppWidget for MapsWidget {
                         | p @ MMapPath::Vdso
                         | p @ MMapPath::Vvar
                         | p @ MMapPath::Vsyscall
-                        | p @ MMapPath::Anonymous => text.push(Text::styled(
+                        | p @ MMapPath::Anonymous => line.push(Span::styled(
                             format!("{:?}\n", p),
                             Style::default().fg(Color::Green),
                         )),
-                        p => text.push(Text::raw(format!("{:?}\n", p))),
+                        p => line.push(Span::raw(format!("{:?}", p))),
                     }
+                    text.push(Spans::from(line));
                 }
             }
             Err(ref e) => {
-                text.push(Text::styled(
+                text.push(Spans::from(Span::styled(
                     format!("Error getting maps: {}", e),
-                    crate::ERROR_STYLE,
-                ));
+                    Style::default().fg(Color::Red).bg(Color::Reset),
+                )));
             }
         }
         let max_scroll =
-            crate::get_numlines(text.iter(), area.width as usize) as i32 - area.height as i32;
+            crate::get_numlines_from_spans(text.iter(), area.width as usize) as i32 - area.height as i32;
         self.scroll.set_max_scroll(max_scroll);
 
-        let widget = Paragraph::new(text.iter())
+        let widget = Paragraph::new(text)
             .block(Block::default().borders(Borders::NONE))
-            .wrap(false)
-            .scroll(self.scroll.scroll_offset);
+            .scroll((self.scroll.scroll_offset, 0));
         f.render_widget(widget, area);
     }
     fn update(&mut self, proc: &Process) {
@@ -464,15 +468,16 @@ impl FilesWidget {
 impl AppWidget for FilesWidget {
     const TITLE: &'static str = "Files";
     fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
-        let mut text = Vec::new();
+        let mut text: Vec<Spans> = Vec::new();
         match self.fds {
             Ok(ref fds) => {
                 let fd_style = Style::default().fg(Color::Green);
                 for fd in fds {
-                    text.push(Text::styled(format!("{: <3} ", fd.fd), fd_style));
+                    let mut line = Vec::new();
+                    line.push(Span::styled(format!("{: <3} ", fd.fd), fd_style));
                     match &fd.target {
                         FDTarget::Path(path) => {
-                            text.push(Text::styled(
+                            line.push(Span::styled(
                                 format!("{}", path.display()),
                                 Style::default().fg(Color::Magenta),
                             ));
@@ -487,63 +492,62 @@ impl AppWidget for FilesWidget {
                                             unsafe { libc::makedev(lock.devmaj, lock.devmin) };
                                         lock.inode == stat.st_ino && stat.st_dev == lock_dev
                                     }) {
-                                        text.push(Text::styled(
+                                        line.push(Span::styled(
                                             format!(
                                                 " ({:?} {:?} {:?})",
                                                 lock.lock_type, lock.mode, lock.kind
                                             ),
-                                            Style::default().modifier(Modifier::DIM),
+                                            Style::default().add_modifier(Modifier::DIM),
                                         ));
                                     }
                                 }
                             }
                         }
                         FDTarget::Pipe(inode) => {
-                            text.push(Text::styled(
+                            line.push(Span::styled(
                                 format!("pipe: {}", inode),
                                 Style::default().fg(Color::Blue),
                             ));
 
                             if let Some((rd_side, wr_side)) = self.pipe_inodes.get(&inode) {
                                 if fd.mode().contains(procfs::process::FDPermissions::READ) {
-                                    text.push(Text::styled(
+                                    line.push(Span::styled(
                                         format!(" (--> {} {})", wr_side.pid, wr_side.cmdline),
-                                        Style::default().modifier(Modifier::DIM),
+                                        Style::default().add_modifier(Modifier::DIM),
                                     ));
                                 } else if fd.mode().contains(procfs::process::FDPermissions::WRITE)
                                 {
-                                    text.push(Text::styled(
+                                    line.push(Span::styled(
                                         format!(" (<-- {} {})", rd_side.pid, rd_side.cmdline),
-                                        Style::default().modifier(Modifier::DIM),
+                                        Style::default().add_modifier(Modifier::DIM),
                                     ));
                                 }
                             }
                         }
-                        FDTarget::Socket(inode) => text.push(Text::styled(
+                        FDTarget::Socket(inode) => line.push(Span::styled(
                             format!("socket: {}", inode),
                             Style::default().fg(Color::Yellow),
                         )),
-                        x => text.push(Text::raw(format!("{:?}", x))),
+                        x => line.push(Span::raw(format!("{:?}", x))),
                     }
-                    text.push(Text::raw("\n"));
+                    text.push(Spans::from(line));
                 }
             }
             Err(ref e) => {
-                text.push(Text::styled(
+                text.push(Spans::from(Span::styled(
                     format!("Error getting fds: {}", e),
-                    crate::ERROR_STYLE,
-                ));
+                    Style::default().fg(Color::Red).bg(Color::Reset),
+                )));
             }
         }
 
         let max_scroll =
-            crate::get_numlines(text.iter(), area.width as usize) as i32 - area.height as i32;
+            crate::get_numlines_from_spans(text.iter(), area.width as usize) as i32 - area.height as i32;
         self.scroll.set_max_scroll(max_scroll);
 
-        let widget = Paragraph::new(text.iter())
+        let widget = Paragraph::new(text)
             .block(Block::default().borders(Borders::NONE))
-            .wrap(false)
-            .scroll(self.scroll.scroll_offset);
+            .scroll((self.scroll.scroll_offset, 0));
         f.render_widget(widget, area);
     }
     fn update(&mut self, proc: &Process) {
@@ -797,7 +801,7 @@ impl AppWidget for TreeWidget {
         let self_style = Style::default().fg(Color::Yellow);
         let unselected_style = Style::default();
 
-        let mut text = Vec::new();
+        let mut text: Vec<Spans> = Vec::new();
 
         let flattened = self.tree.flatten();
 
@@ -805,6 +809,7 @@ impl AppWidget for TreeWidget {
         let mut last_depth = 0;
         let mut prints = Vec::new();
         while let Some((idx, (depth, item))) = iter.next() {
+            let mut line: Vec<Span> = Vec::with_capacity(2);
             let depth = *depth as usize;
             if depth > last_depth {
                 prints.push(item.num_siblings);
@@ -842,21 +847,22 @@ impl AppWidget for TreeWidget {
                     .collect::<Vec<_>>()
                     .join("")
             };
-            text.push(Text::raw(lines));
+
+            line.push(Span::raw(lines));
 
             if idx > 0 {
                 let has_children = iter
                     .peek()
                     .map(|(_, (p_depth, _))| *p_depth as usize > depth)
                     .unwrap_or(false);
-                text.push(Text::raw(format!(
+                line.push(Span::raw(format!(
                     "{b}╸",
                     b = if has_children { "┳" } else { "━" },
                 )));
             }
 
-            text.push(Text::styled(
-                format!("{} {}\n", item.pid, item.cmdline),
+            line.push(Span::styled(
+                format!("{} {}", item.pid, item.cmdline),
                 if item.pid == self.selected_pid {
                     selected_style
                 } else if item.pid == self.this_pid {
@@ -865,6 +871,7 @@ impl AppWidget for TreeWidget {
                     unselected_style
                 },
             ));
+            text.push(Spans::from(line));
         }
         let select_idx = flattened
             .iter()
@@ -881,10 +888,9 @@ impl AppWidget for TreeWidget {
 
         //let max_scroll = get_numlines(text.iter(), area.width as usize) as i32 - area.height as i32;
         //self.set_max_scroll(max_scroll);
-        let widget = Paragraph::new(text.iter())
+        let widget = Paragraph::new(text)
             .block(Block::default().borders(Borders::NONE))
-            .scroll(scroll as u16)
-            .wrap(false);
+            .scroll((scroll as u16, 0));
         f.render_widget(widget, area);
     }
     fn update(&mut self, proc: &Process) {
@@ -1018,7 +1024,6 @@ impl CGroupWidget {
 impl AppWidget for CGroupWidget {
     const TITLE: &'static str = "CGroups";
     fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
-        use std::fs::read_to_string;
 
         // split the area in half -- the left side is a selectable list of controllers, and the
         // right side is some details about them
@@ -1032,11 +1037,12 @@ impl AppWidget for CGroupWidget {
         let green = Style::default().fg(Color::Green);
         let selected = Style::default().fg(Color::Yellow);
 
-        let mut text = Vec::new();
-        let mut details = Vec::new();
+        let mut text: Vec<Spans> = Vec::new();
+        let mut details: Vec<Spans> = Vec::new();
 
         if let Ok(cgroups) = &self.proc_groups {
             for (idx, cg) in cgroups.iter().enumerate() {
+                let mut line: Vec<Span> = Vec::new();
                 let current = idx == self.select_idx as usize;
                 let groups = BTreeSet::from_iter(cg.controllers.clone());
                 let controller_name = if cg.controllers.is_empty() {
@@ -1045,11 +1051,11 @@ impl AppWidget for CGroupWidget {
                     cg.controllers.join(",")
                 };
                 if let Some(mountpoint) = self.v1_controllers.get(&groups) {
-                    text.push(Text::styled(
+                    line.push(Span::styled(
                         format!("{}: ", controller_name),
                         if current { green } else { selected },
                     ));
-                    text.push(Text::raw(format!("{}\n", cg.pathname)));
+                    line.push(Span::raw(format!("{}\n", cg.pathname)));
 
                     let root = if cg.pathname.starts_with('/') {
                         mountpoint.join(&cg.pathname[1..])
@@ -1058,103 +1064,109 @@ impl AppWidget for CGroupWidget {
                     };
 
                     if current {
-                        details.push(Text::raw(format!("{:?}\n", groups)));
+                        details.push(Spans::from(Span::raw(format!("{:?}", groups))));
                         if groups.contains("pids") {
                             let current = read_to_string(root.join("pids.current"));
                             let max = read_to_string(root.join("pids.max"));
                             if let (Ok(current), Ok(max)) = (current, max) {
-                                details.push(Text::raw(format!(
-                                    "{} of {}\n",
+                                details.push(Spans::from(Span::raw(format!(
+                                    "{} of {}",
                                     current.trim(),
                                     max.trim()
-                                )));
+                                ))));
                             }
                         }
                         if groups.contains("freezer") {
                             let state = read_to_string(root.join("freezer.state"));
                             if let Ok(state) = state {
-                                details.push(Text::raw(format!("state: {}\n", state.trim())));
+                                details.push(Spans::from(Span::raw(format!("state: {}", state.trim()))));
                             }
                         }
                         if groups.contains("memory") {
                             if let Ok(usage) = read_to_string(root.join("memory.usage_in_bytes")) {
-                                details.push(Text::raw(format!(
-                                    "Group Usage: {} bytes\n",
+                                details.push(Spans::from(Span::raw(format!(
+                                    "Group Usage: {} bytes",
                                     usage.trim()
-                                )));
+                                ))));
                             }
                             if let Ok(limit) = read_to_string(root.join("memory.limit_in_bytes")) {
-                                details.push(Text::raw(format!(
-                                    "Group Limit: {} bytes\n",
+                                details.push(Spans::from(Span::raw(format!(
+                                    "Group Limit: {} bytes",
                                     limit.trim()
-                                )));
+                                ))));
                             }
                             if let Ok(usage) =
                                 read_to_string(root.join("memory.kmem.usage_in_bytes"))
                             {
-                                details.push(Text::raw(format!(
-                                    "Kernel Usage: {} bytes\n",
+                                details.push(Spans::from(Span::raw(format!(
+                                    "Kernel Usage: {} bytes",
                                     usage.trim()
-                                )));
+                                ))));
                             }
                             if let Ok(limit) =
                                 read_to_string(root.join("memory.kmem.limit_in_bytes"))
                             {
-                                details.push(Text::raw(format!(
-                                    "Kernel Limit: {} bytes\n",
+                                details.push(Spans::from(Span::raw(format!(
+                                    "Kernel Limit: {} bytes",
                                     limit.trim()
-                                )));
+                                ))));
                             }
                             if let Ok(limit) = read_to_string(root.join("memory.stat")) {
-                                details.push(Text::raw("stats:\n"));
-                                details.push(Text::raw(limit));
+                                details.push(Spans::from(vec![
+                                    Span::raw("stats:\n"),
+                                    Span::raw(limit)
+                                ]));
                             }
                         }
                         if groups.contains("net_cls") {
                             if let Ok(classid) = read_to_string(root.join("net_cls.classid")) {
-                                details.push(Text::raw(format!("Class ID: {}\n", classid.trim())));
+                                details.push(Spans::from(Span::raw(format!("Class ID: {}", classid.trim()))));
                             }
                         }
                         if groups.contains("net_prio") {
                             if let Ok(idx) = read_to_string(root.join("net_prio.prioidx")) {
-                                details.push(Text::raw(format!("Prioidx: {}\n", idx)));
+                                details.push(Spans::from(Span::raw(format!("Prioidx: {}", idx))));
                             }
                             if let Ok(map) = read_to_string(root.join("net_prio.ifpriomap")) {
-                                details.push(Text::raw("ifpriomap:\n"));
-                                details.push(Text::raw(map));
+                                details.push(Spans::from(vec![
+                                    Span::raw("ifpriomap:"),
+                                    Span::raw(map)
+                                ]));
+                                
                             }
                         }
                         if groups.contains("blkio") {}
                         if groups.contains("cpuacct") {
                             if let Ok(acct) = read_to_string(root.join("cpuacct.usage")) {
-                                details.push(Text::raw(format!(
-                                    "Total nanoseconds: {}\n",
+                                details.push(Spans::from(Span::raw(format!(
+                                    "Total nanoseconds: {}",
                                     acct.trim()
-                                )));
+                                ))));
                             }
                             if let Ok(usage_all) = read_to_string(root.join("cpuacct.usage_all")) {
-                                details.push(Text::raw(usage_all));
+                                details.push(Spans::from(Span::raw(usage_all)));
                             }
                         }
                         {
-                            details.push(Text::raw(format!("--> {:?}\n", mountpoint)));
-                            details.push(Text::raw(format!("--> {:?}\n", cg.pathname)));
+                            details.push(Spans::from(Span::raw(format!("--> {:?}", mountpoint))));
+                            details.push(Spans::from(Span::raw(format!("--> {:?}", cg.pathname))));
                         }
                     }
                 } else {
-                    text.push(Text::styled(
+                    line.push(Span::styled(
                         format!("{}: ", controller_name),
                         if current {
-                            green.modifier(Modifier::DIM)
+                            green.add_modifier(Modifier::DIM)
                         } else {
-                            selected.modifier(Modifier::DIM)
+                            selected.add_modifier(Modifier::DIM)
                         },
                     ));
-                    text.push(Text::raw(format!("{}\n", cg.pathname)));
+                    line.push(Span::raw(format!("{}", cg.pathname)));
                     if idx == self.select_idx as usize {
-                        details.push(Text::raw("This controller isn't supported by procdump"));
+                        details.push(Spans::from(Span::raw("This controller isn't supported by procdump")));
                     }
                 }
+                text.push(Spans::from(line));
             }
         }
 
@@ -1163,15 +1175,14 @@ impl AppWidget for CGroupWidget {
         let max_scroll = std::cmp::max(0, text.len() as i32 - chunks[0].height as i32);
         let scroll = std::cmp::min(std::cmp::max(0, diff), max_scroll as i32);
 
-        let widget = Paragraph::new(text.iter())
+        let widget = Paragraph::new(text)
             .block(Block::default().borders(Borders::NONE))
-            .wrap(false)
-            .scroll(scroll as u16);
+            .scroll((0, scroll as u16));
         f.render_widget(widget, chunks[0]);
 
-        let widget = Paragraph::new(details.iter())
+        let widget = Paragraph::new(details)
             .block(Block::default().borders(Borders::LEFT))
-            .wrap(true);
+            .wrap(Wrap { trim: false });
         f.render_widget(widget, chunks[1]);
     }
     fn update(&mut self, proc: &Process) {
@@ -1242,7 +1253,7 @@ impl AppWidget for IOWidget {
             .split(area);
 
         let spark_colors = [Color::LightCyan, Color::LightMagenta, Color::LightGreen];
-        let mut text = Vec::new();
+        let mut text: Vec<Spans> = Vec::new();
         let s = Style::default().fg(Color::Green);
         if let Ok(ref io_d) = self.io_d {
             let io = io_d.latest();
@@ -1251,82 +1262,100 @@ impl AppWidget for IOWidget {
             let dur_sec = duration.as_millis() as f32 / 1000.0;
 
             // all IO
-            text.push(Text::styled("all io read: ", s));
-            text.push(Text::raw(format!("{: <12}", fmt_bytes(io.rchar, "B"))));
-            text.push(Text::styled("all io write:", s));
-            text.push(Text::raw(format!("{: <12}", fmt_bytes(io.wchar, "B"))));
-            text.push(Text::styled(
-                "\u{2503}\n",
-                Style::default().fg(spark_colors[0]),
-            ));
+            text.push(Spans::from(vec![
+                Span::styled("all io read: ", s),
+                Span::raw(format!("{: <12}", fmt_bytes(io.rchar, "B"))),
+                Span::styled("all io write:", s),
+                Span::raw(format!("{: <12}", fmt_bytes(io.wchar, "B"))),
+                Span::styled(
+                    "\u{2503}",
+                    Style::default().fg(spark_colors[0]),
+                )
+            ]));
+           
 
             let io_read_rate = (io.rchar - prev_io.rchar) as f32 / dur_sec;
             let io_write_rate = (io.wchar - prev_io.wchar) as f32 / dur_sec;
 
-            text.push(Text::styled("read rate:   ", s));
-            text.push(Text::raw(format!("{: <12}", fmt_rate(io_read_rate, "Bps"))));
-            text.push(Text::styled("write rate:  ", s));
-            text.push(Text::raw(format!(
-                "{: <12}",
-                fmt_rate(io_write_rate, "Bps")
-            )));
-            text.push(Text::styled(
-                "\u{2503}\n",
-                Style::default().fg(spark_colors[0]),
-            ));
+            text.push(Spans::from(vec![
+                Span::styled("read rate:   ", s),
+                Span::raw(format!("{: <12}", fmt_rate(io_read_rate, "Bps"))),
+                Span::styled("write rate:  ", s),
+                Span::raw(format!(
+                    "{: <12}",
+                    fmt_rate(io_write_rate, "Bps")
+                )),
+                Span::styled(
+                    "\u{2503}",
+                    Style::default().fg(spark_colors[0]),
+                )
+            ]));
+           
 
             // syscalls
-            text.push(Text::styled("read ops:    ", s));
-            text.push(Text::raw(format!("{: <12}", fmt_bytes(io.syscr, ""))));
-            text.push(Text::styled("write ops:   ", s));
-            text.push(Text::raw(format!("{: <12}", fmt_bytes(io.syscw, ""))));
-            text.push(Text::styled(
-                "\u{2503}\n",
-                Style::default().fg(spark_colors[1]),
-            ));
+            text.push(Spans::from(vec![
+                Span::styled("read ops:    ", s),
+                Span::raw(format!("{: <12}", fmt_bytes(io.syscr, ""))),
+                Span::styled("write ops:   ", s),
+                Span::raw(format!("{: <12}", fmt_bytes(io.syscw, ""))),
+                Span::styled(
+                    "\u{2503}",
+                    Style::default().fg(spark_colors[1]),
+                )
+            ]));
+           
 
             let io_rop_rate = (io.syscr - prev_io.syscr) as f32 / dur_sec;
             let io_wop_rate = (io.syscw - prev_io.syscw) as f32 / dur_sec;
 
-            text.push(Text::styled("op rate:     ", s));
-            text.push(Text::raw(format!("{: <12}", fmt_rate(io_rop_rate, "ps"))));
-            text.push(Text::styled("op rate:     ", s));
-            text.push(Text::raw(format!("{: <12}", fmt_rate(io_wop_rate, "ps"))));
-            text.push(Text::styled(
-                "\u{2503}\n",
-                Style::default().fg(spark_colors[1]),
-            ));
+            text.push(Spans::from(vec![
+                Span::styled("op rate:     ", s),
+                Span::raw(format!("{: <12}", fmt_rate(io_rop_rate, "ps"))),
+                Span::styled("op rate:     ", s),
+                Span::raw(format!("{: <12}", fmt_rate(io_wop_rate, "ps"))),
+                Span::styled(
+                    "\u{2503}",
+                    Style::default().fg(spark_colors[1]),
+                )
+            ]));
+            
 
             // disk IO
-            text.push(Text::styled("disk reads:  ", s));
-            text.push(Text::raw(format!("{: <12}", fmt_bytes(io.read_bytes, "B"))));
-            text.push(Text::styled("disk writes: ", s));
-            text.push(Text::raw(format!(
-                "{: <12}",
-                fmt_bytes(io.write_bytes, "B")
-            )));
-            text.push(Text::styled(
-                "\u{2503}\n",
-                Style::default().fg(spark_colors[2]),
-            ));
+            text.push(Spans::from(vec![
+                Span::styled("disk reads:  ", s),
+                Span::raw(format!("{: <12}", fmt_bytes(io.read_bytes, "B"))),
+                Span::styled("disk writes: ", s),
+                Span::raw(format!(
+                    "{: <12}",
+                    fmt_bytes(io.write_bytes, "B")
+                )),
+                Span::styled(
+                    "\u{2503}",
+                    Style::default().fg(spark_colors[2]),
+                )
+            ]));
+          
 
             let disk_read_rate = (io.read_bytes - prev_io.read_bytes) as f32 / dur_sec;
             let disk_write_rate = (io.write_bytes - prev_io.write_bytes) as f32 / dur_sec;
 
-            text.push(Text::styled("disk rate:   ", s));
-            text.push(Text::raw(format!(
-                "{: <12}",
-                fmt_rate(disk_read_rate, "Bps")
-            )));
-            text.push(Text::styled("disk rate:   ", s));
-            text.push(Text::raw(format!(
-                "{: <12}",
-                fmt_rate(disk_write_rate, "Bps")
-            )));
-            text.push(Text::styled(
-                "\u{2503}\n",
-                Style::default().fg(spark_colors[2]),
-            ));
+            text.push(Spans::from(vec![
+                Span::styled("disk rate:   ", s),
+                Span::raw(format!(
+                    "{: <12}",
+                    fmt_rate(disk_read_rate, "Bps")
+                )),
+                Span::styled("disk rate:   ", s),
+                Span::raw(format!(
+                    "{: <12}",
+                    fmt_rate(disk_write_rate, "Bps")
+                )),
+                Span::styled(
+                    "\u{2503}",
+                    Style::default().fg(spark_colors[2]),
+                )
+            ]));
+           
 
             //let rps  = (io.rchar - prev_io.rchar) as f32 / dur_sec;
             //text.push(Text::raw(format!("{} ({}) ", fmt_bytes(io.rchar), fmt_rate(rps))));
@@ -1340,9 +1369,9 @@ impl AppWidget for IOWidget {
             //text.push(Text::raw(format!("{} ({})", fmt_bytes(io.read_bytes), fmt_rate(rps))));
         }
 
-        let widget = Paragraph::new(text.iter())
+        let widget = Paragraph::new(text)
             .block(Block::default().borders(Borders::NONE))
-            .wrap(true);
+            .wrap(Wrap { trim : true });
         f.render_widget(widget, chunks[0]);
 
         // split the right side into 3 areas to draw the sparklines
@@ -1412,7 +1441,7 @@ impl AppWidget for IOWidget {
 
 struct TaskData {
     task: procfs::process::Task,
-    io: procfs::process::Io,
+    _io: procfs::process::Io,
     stat: procfs::process::Stat
 }
 impl TaskData {
@@ -1420,7 +1449,7 @@ impl TaskData {
         match (task.io(), task.stat()) {
             (Ok(io), Ok(stat)) => {
                 Some(TaskData {
-                    task, io, stat
+                    task, _io: io, stat
                 })
             }
             _ => None
@@ -1458,7 +1487,7 @@ impl TaskWidget {
 impl AppWidget for TaskWidget {
     const TITLE: &'static str = "Task";
     fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
-        let mut text = Vec::new();
+        let mut text: Vec<Spans> = Vec::new();
 
         if let Ok(tasks) = &self.tasks {
             for task in tasks.values() {
@@ -1471,20 +1500,19 @@ impl AppWidget for TaskWidget {
                     format!("??%")
                 };
 
-                text.push(Text::raw(format!("({:<16}) {:<5} {}\n", name, task.task.tid, cpu_str)));
+                text.push(Spans::from(Span::raw(format!("({:<16}) {:<5} {}", name, task.task.tid, cpu_str))));
             }
         } else {
-            text.push(Text::raw(format!("Error reading tasks")));
+            text.push(Spans::from(Span::raw(format!("Error reading tasks"))));
         }
 
         let max_scroll =
-            crate::get_numlines(text.iter(), area.width as usize) as i32 - area.height as i32;
+            crate::get_numlines_from_spans(text.iter(), area.width as usize) as i32 - area.height as i32;
         self.scroll.set_max_scroll(max_scroll);
 
-        let widget = Paragraph::new(text.iter())
+        let widget = Paragraph::new(text)
             .block(Block::default().borders(Borders::NONE))
-            .wrap(false)
-            .scroll(self.scroll.scroll_offset);
+            .scroll((0, self.scroll.scroll_offset));
         f.render_widget(widget, area);
     }
     fn update(&mut self, proc: &Process) {

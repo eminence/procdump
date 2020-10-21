@@ -9,7 +9,7 @@ use procfs::{
     ProcResult,
 };
 use termion::event::{Key, MouseEvent};
-use tui::widgets::Text;
+use tui::text::{Span, Spans};
 
 #[derive(Debug)]
 pub struct ProcessTreeEntry {
@@ -143,26 +143,34 @@ pub(crate) fn limit_to_string(limit: &LimitValue) -> Cow<'static, str> {
     }
 }
 
+pub(crate) fn get_numlines_from_spans<'t, I>(spans: I, width: usize) -> usize 
+    where
+    I: Iterator<Item = &'t Spans<'t>>
+{
+    let mut num_lines = 1;
+    for span in spans {
+        num_lines += 1 + (span.width() / width as usize);
+    }
+
+    num_lines
+}
+
 /// Given some text, and a width, try to figure out how many lines it needs
 pub(crate) fn get_numlines<'t, I>(i: I, width: usize) -> usize
 where
-    I: Iterator<Item = &'t Text<'t>>,
+    I: Iterator<Item = &'t Span<'t>>,
 {
     let mut cur_line_length = 0;
     let mut num_lines = 1;
     for item in i {
-        let cow = match item {
-            Text::Raw(cow) => cow,
-            Text::Styled(cow, _) => cow,
-        };
 
         // we assume that if there is a newline, it will only be at the *end*
-        if cow.ends_with('\n') {
-            cur_line_length += cow.len() - 1;
+        if item.content.ends_with('\n') {
+            cur_line_length += item.content.len() - 1;
             num_lines += 1 + (cur_line_length / width as usize);
             cur_line_length = 0;
         } else {
-            cur_line_length += cow.len();
+            cur_line_length += item.content.len();
         }
     }
     num_lines += cur_line_length / width as usize;
@@ -413,11 +421,12 @@ pub(crate) fn get_unix_table() -> HashMap<u32, procfs::net::UnixNetEntry> {
 
 #[cfg(test)]
 mod tests {
-    use tui::widgets::Text;
+    use tui::text::Span;
+
 
     #[test]
     fn test_boxsize() {
-        let text = vec![Text::raw("hi\n"), Text::raw("hey")];
+        let text = vec![Span::raw("hi\n"), Span::raw("hey")];
 
         let l = super::get_numlines(text.iter(), 5);
         assert_eq!(l, 2);
