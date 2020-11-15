@@ -1512,7 +1512,7 @@ impl AppWidget for TaskWidget {
 
         let widget = Paragraph::new(text)
             .block(Block::default().borders(Borders::NONE))
-            .scroll((0, self.scroll.scroll_offset));
+            .scroll((self.scroll.scroll_offset, 0));
         f.render_widget(widget, area);
     }
     fn update(&mut self, proc: &Process) {
