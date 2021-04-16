@@ -14,3 +14,12 @@ Install the latest published version:
 Or clone and build from source.  Install [rust](https://rustup.rs/), download the source, and then run:
 
 > cargo build
+
+# Usage
+
+```
+procdump [PID]
+```
+
+If the `PID` argument is missing, procdump will show information
+about its own running process.
