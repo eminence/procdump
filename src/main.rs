@@ -672,6 +672,7 @@ fn main() -> anyhow::Result<()> {
             _ => {}
         }
     }
+    terminal.clear()?;
 
     //println!("\n-----");
     //println!("{:?}", prc);
