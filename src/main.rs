@@ -608,7 +608,7 @@ fn main() -> anyhow::Result<()> {
 
     let events = util::Events::new();
 
-    let stdout = std::io::stdout().into_raw_mode()?;
+    let stdout = termion::screen::AlternateScreen::from(std::io::stdout().into_raw_mode()?);
     let backend = TermionBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
     terminal.hide_cursor()?;
@@ -672,7 +672,6 @@ fn main() -> anyhow::Result<()> {
             _ => {}
         }
     }
-    terminal.clear()?;
 
     //println!("\n-----");
     //println!("{:?}", prc);
