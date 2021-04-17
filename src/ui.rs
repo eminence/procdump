@@ -585,152 +585,159 @@ impl LimitWidget {
 impl AppWidget for LimitWidget {
     const TITLE: &'static str = "Limits";
     fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
-        let headers = ["Type", "Soft Limit", "Hard Limit", ""];
+        let header_cell_style = Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
+        let headers = vec![Cell::from("Type").style(header_cell_style),
+            Cell::from("Soft Limit").style(header_cell_style),
+            Cell::from("Hard Limit").style(header_cell_style),
+            Cell::from("")];
         let mut rows = Vec::new();
+
+        rows.push(Row::new(headers).bottom_margin(1));
+
         if let Ok(ref limits) = self.limits {
-            rows.push(Row::Data(
+            rows.push(Row::new(
                 vec![
                     Cow::Borrowed("Cpu Time"),
                     limit_to_string(&limits.max_cpu_time.soft_limit),
                     limit_to_string(&limits.max_cpu_time.hard_limit),
                     Cow::Borrowed("(seconds)"),
                 ]
-                .into_iter(),
+                .into_iter().map(tui::text::Text::raw),
             ));
-            rows.push(Row::Data(
+            rows.push(Row::new(
                 vec![
                     Cow::Borrowed("File Size"),
                     limit_to_string(&limits.max_file_size.soft_limit),
                     limit_to_string(&limits.max_file_size.hard_limit),
                     Cow::Borrowed("(bytes)"),
                 ]
-                .into_iter(),
+                .into_iter().map(tui::text::Text::raw),
             ));
-            rows.push(Row::Data(
+            rows.push(Row::new(
                 vec![
                     Cow::Borrowed("Data Size"),
                     limit_to_string(&limits.max_data_size.soft_limit),
                     limit_to_string(&limits.max_data_size.hard_limit),
                     Cow::Borrowed("(bytes)"),
                 ]
-                .into_iter(),
+                .into_iter().map(tui::text::Text::raw),
             ));
-            rows.push(Row::Data(
+            rows.push(Row::new(
                 vec![
                     Cow::Borrowed("Stack Size"),
                     limit_to_string(&limits.max_stack_size.soft_limit),
                     limit_to_string(&limits.max_stack_size.hard_limit),
                     Cow::Borrowed("(bytes)"),
                 ]
-                .into_iter(),
+                .into_iter().map(tui::text::Text::raw),
             ));
-            rows.push(Row::Data(
+            rows.push(Row::new(
                 vec![
                     Cow::Borrowed("Core File Size"),
                     limit_to_string(&limits.max_core_file_size.soft_limit),
                     limit_to_string(&limits.max_core_file_size.hard_limit),
                     Cow::Borrowed("(bytes)"),
                 ]
-                .into_iter(),
+                .into_iter().map(tui::text::Text::raw),
             ));
-            rows.push(Row::Data(
+            rows.push(Row::new(
                 vec![
                     Cow::Borrowed("Resident Set"),
                     limit_to_string(&limits.max_resident_set.soft_limit),
                     limit_to_string(&limits.max_resident_set.hard_limit),
                     Cow::Borrowed("(bytes)"),
                 ]
-                .into_iter(),
+                .into_iter().map(tui::text::Text::raw),
             ));
-            rows.push(Row::Data(
+            rows.push(Row::new(
                 vec![
                     Cow::Borrowed("Processes"),
                     limit_to_string(&limits.max_processes.soft_limit),
                     limit_to_string(&limits.max_processes.hard_limit),
                     Cow::Borrowed(""),
                 ]
-                .into_iter(),
+                .into_iter().map(tui::text::Text::raw),
             ));
-            rows.push(Row::Data(
+            rows.push(Row::new(
                 vec![
                     Cow::Borrowed("Open Files"),
                     limit_to_string(&limits.max_open_files.soft_limit),
                     limit_to_string(&limits.max_open_files.hard_limit),
                     Cow::Borrowed(""),
                 ]
-                .into_iter(),
+                .into_iter().map(tui::text::Text::raw),
             ));
-            rows.push(Row::Data(
+            rows.push(Row::new(
                 vec![
                     Cow::Borrowed("Locked Memory"),
                     limit_to_string(&limits.max_locked_memory.soft_limit),
                     limit_to_string(&limits.max_locked_memory.hard_limit),
                     Cow::Borrowed("(bytes)"),
                 ]
-                .into_iter(),
+                .into_iter().map(tui::text::Text::raw),
             ));
-            rows.push(Row::Data(
+            rows.push(Row::new(
                 vec![
                     Cow::Borrowed("Address Space"),
                     limit_to_string(&limits.max_address_space.soft_limit),
                     limit_to_string(&limits.max_address_space.hard_limit),
                     Cow::Borrowed(""),
                 ]
-                .into_iter(),
+                .into_iter().map(tui::text::Text::raw),
             ));
-            rows.push(Row::Data(
+            rows.push(Row::new(
                 vec![
                     Cow::Borrowed("File Locks"),
                     limit_to_string(&limits.max_file_locks.soft_limit),
                     limit_to_string(&limits.max_file_locks.hard_limit),
                     Cow::Borrowed(""),
                 ]
-                .into_iter(),
+                .into_iter().map(tui::text::Text::raw),
             ));
-            rows.push(Row::Data(
+            rows.push(Row::new(
                 vec![
                     Cow::Borrowed("Pending Signals"),
                     limit_to_string(&limits.max_pending_signals.soft_limit),
                     limit_to_string(&limits.max_pending_signals.hard_limit),
                     Cow::Borrowed(""),
                 ]
-                .into_iter(),
+                .into_iter().map(tui::text::Text::raw),
             ));
-            rows.push(Row::Data(
+            rows.push(Row::new(
                 vec![
                     Cow::Borrowed("Msgqueue Size"),
                     limit_to_string(&limits.max_msgqueue_size.soft_limit),
                     limit_to_string(&limits.max_msgqueue_size.hard_limit),
                     Cow::Borrowed("(bytes)"),
                 ]
-                .into_iter(),
+                .into_iter().map(tui::text::Text::raw),
             ));
-            rows.push(Row::Data(
+            rows.push(Row::new(
                 vec![
                     Cow::Borrowed("Nice Priority"),
                     limit_to_string(&limits.max_nice_priority.soft_limit),
                     limit_to_string(&limits.max_nice_priority.hard_limit),
                     Cow::Borrowed(""),
                 ]
-                .into_iter(),
+                .into_iter().map(tui::text::Text::raw),
             ));
-            rows.push(Row::Data(
+            rows.push(Row::new(
                 vec![
                     Cow::Borrowed("Realtime Priority"),
                     limit_to_string(&limits.max_realtime_priority.soft_limit),
                     limit_to_string(&limits.max_realtime_priority.hard_limit),
                     Cow::Borrowed(""),
                 ]
-                .into_iter(),
+                .into_iter().map(tui::text::Text::raw),
             ));
-            rows.push(Row::Data(
+            rows.push(Row::new(
                 vec![
                     Cow::Borrowed("Realtime Timeout"),
                     limit_to_string(&limits.max_realtime_timeout.soft_limit),
                     limit_to_string(&limits.max_realtime_timeout.hard_limit),
                     Cow::Borrowed("(μseconds)"),
                 ]
-                .into_iter(),
+                .into_iter().map(tui::text::Text::raw),
             ));
         }
 
@@ -748,7 +755,7 @@ impl AppWidget for LimitWidget {
             rows
         };
 
-        let widget = Table::new(headers.iter(), rows.into_iter()).widths(&[
+        let widget = Table::new(rows.into_iter()).widths(&[
             Constraint::Length(18),
             Constraint::Length(12),
             Constraint::Length(12),
