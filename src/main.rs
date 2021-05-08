@@ -3,11 +3,14 @@ use std::time::{Duration, Instant};
 use procfs::process::Process;
 use termion::event::Key;
 use termion::raw::IntoRawMode;
-use tui::{backend::{Backend, TermionBackend}, text::{Span, Spans}};
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::*;
 use tui::terminal::{Frame, Terminal};
 use tui::widgets::*;
+use tui::{
+    backend::{Backend, TermionBackend},
+    text::{Span, Spans, Text},
+};
 
 // pub const ERROR_STYLE: Style = Style::default().fg(Color::Red).bg(Color::Reset);
 
@@ -324,7 +327,7 @@ impl<'a> App<'a> {
         }
     }
 
-    fn draw_top<B: Backend>(&self, f: &mut Frame<B>, top_area: Rect, area: Rect) {
+    fn draw_top<B: Backend>(&self, f: &mut Frame<B>, top_area: Rect, area: Rect, help_text: Text) {
         // first first line is the pid and process name
         let mut text = Vec::new();
         if let Ok(cmdline) = self.proc.cmdline() {
@@ -362,7 +365,7 @@ impl<'a> App<'a> {
         // first block is basic state info
         let s = Style::default().fg(Color::Green);
         let mut text: Vec<Spans> = Vec::new();
-        
+
         // first line:
         // pid:19610 ppid:8959 pgrp:19610 session:8959
         text.push(Spans::from(vec![
@@ -489,7 +492,9 @@ impl<'a> App<'a> {
             .block(Block::default().borders(Borders::RIGHT));
         f.render_widget(widget, chunks[1]);
 
-        // third block is ????
+        // third block is help info
+        let widget = Paragraph::new(help_text).wrap(Wrap { trim: true });
+        f.render_widget(widget, chunks[2]);
     }
 
     fn draw_tab_selector<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
@@ -502,7 +507,7 @@ impl<'a> App<'a> {
             .highlight_style(Style::default().fg(Color::Yellow));
         f.render_widget(widget, area);
     }
-    fn draw_tab_body<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+    fn draw_tab_body<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
         // split this into the body and a scrollbar area
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -512,35 +517,35 @@ impl<'a> App<'a> {
 
         match self.tab.current_label() {
             ui::EnvWidget::TITLE => {
-                self.env_widget.draw(f, chunks[0]);
+                self.env_widget.draw(f, chunks[0], help_text);
                 self.env_widget.draw_scrollbar(f, chunks[1]);
             }
             ui::NetWidget::TITLE => {
-                self.net_widget.draw(f, chunks[0]);
+                self.net_widget.draw(f, chunks[0], help_text);
                 self.net_widget.draw_scrollbar(f, chunks[1]);
             }
             ui::MapsWidget::TITLE => {
-                self.maps_widget.draw(f, chunks[0]);
+                self.maps_widget.draw(f, chunks[0], help_text);
                 self.maps_widget.draw_scrollbar(f, chunks[1]);
             }
             ui::FilesWidget::TITLE => {
-                self.files_widget.draw(f, chunks[0]);
+                self.files_widget.draw(f, chunks[0], help_text);
                 self.files_widget.draw_scrollbar(f, chunks[1]);
             }
             ui::LimitWidget::TITLE => {
-                self.limit_widget.draw(f, area);
+                self.limit_widget.draw(f, area, help_text);
             }
             ui::TreeWidget::TITLE => {
-                self.tree_widget.draw(f, area);
+                self.tree_widget.draw(f, area, help_text);
             }
             ui::CGroupWidget::TITLE => {
-                self.cgroup_widget.draw(f, area);
+                self.cgroup_widget.draw(f, area, help_text);
             }
             ui::IOWidget::TITLE => {
-                self.io_widget.draw(f, area);
+                self.io_widget.draw(f, area, help_text);
             }
             ui::TaskWidget::TITLE => {
-                self.task_widget.draw(f, area);
+                self.task_widget.draw(f, area, help_text);
                 self.task_widget.draw_scrollbar(f, chunks[1]);
 
             }
@@ -631,8 +636,8 @@ fn main() -> anyhow::Result<()> {
                             Constraint::Length(4 + 2), // top fixed-sized info box
                             Constraint::Length(1 + 2), // tab selector
                             Constraint::Min(0),        // tab body
-                            Constraint::Length(5),     // cpu sparkline
-                            Constraint::Length(5),     // cpu sparkline
+                            Constraint::Length(10),     // cpu sparkline
+                            // Constraint::Length(5),     // cpu sparkline
                         ]
                         .as_ref(),
                     )
@@ -640,10 +645,13 @@ fn main() -> anyhow::Result<()> {
 
                 tab_body_height = chunks[3].height;
 
-                app.draw_top(&mut f, chunks[0], chunks[1]);
+                let mut help_text = Text::default();
+
                 app.draw_tab_selector(&mut f, chunks[2]);
-                app.draw_tab_body(&mut f, chunks[3]);
+                app.draw_tab_body(&mut f, chunks[3], &mut help_text);
                 app.draw_cpu_spark(&mut f, chunks[4]);
+                
+                app.draw_top(&mut f, chunks[0], chunks[1], help_text);
             })?;
             need_redraw = false;
         }

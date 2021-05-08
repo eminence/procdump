@@ -11,7 +11,7 @@ use procfs::process::{FDInfo, FDTarget, Process};
 use procfs::ProcessCgroup;
 use procfs::{ProcError, ProcResult};
 use termion::event::Key;
-use tui::{backend::Backend, text::{Span, Spans}};
+use tui::{backend::Backend, text::{Span, Spans, Text}};
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::*;
 use tui::terminal::Frame;
@@ -61,7 +61,7 @@ impl std::ops::BitOr for InputResult {
 pub trait AppWidget {
     const TITLE: &'static str;
 
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect);
+    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text);
     fn update(&mut self, proc: &Process);
     fn handle_input(&mut self, input: Key, height: u16) -> InputResult;
 }
@@ -200,8 +200,15 @@ impl AppWidget for EnvWidget {
             self.last_updated = Instant::now();
         }
     }
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
         let mut text: Vec<Spans> = Vec::new();
+
+        let spans = Spans::from(vec![
+            Span::raw("The "),
+            Span::styled("Env", Style::default().fg(Color::Yellow)),
+            Span::raw(" tab shows the environment variables for the process"),
+        ]);
+        help_text.extend(Text::from(spans));
 
         match &self.env {
             Err(e) => {
@@ -264,8 +271,15 @@ impl NetWidget {
 
 impl AppWidget for NetWidget {
     const TITLE: &'static str = "Net";
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
         let mut text: Vec<Spans> = Vec::new();
+
+        let spans = Spans::from(vec![
+            Span::raw("The "),
+            Span::styled("Net", Style::default().fg(Color::Yellow)),
+            Span::raw(" tab shows all of the open network connections."),
+        ]);
+        help_text.extend(Text::from(spans));
 
         match &self.fd {
             Ok(fd) => {
@@ -381,8 +395,16 @@ impl MapsWidget {
 
 impl AppWidget for MapsWidget {
     const TITLE: &'static str = "Maps";
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
         let mut text: Vec<Spans> = Vec::new();
+
+        let spans = Spans::from(vec![
+            Span::raw("The "),
+            Span::styled("Maps", Style::default().fg(Color::Yellow)),
+            Span::raw(" tab shows the currently mapped memory regions."),
+        ]);
+        help_text.extend(Text::from(spans));
+
         match &self.maps {
             Ok(maps) => {
                 for map in maps {
@@ -467,8 +489,16 @@ impl FilesWidget {
 
 impl AppWidget for FilesWidget {
     const TITLE: &'static str = "Files";
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
         let mut text: Vec<Spans> = Vec::new();
+
+        let spans = Spans::from(vec![
+            Span::raw("The "),
+            Span::styled("Files", Style::default().fg(Color::Yellow)),
+            Span::raw(" tab shows the currently open files."),
+        ]);
+        help_text.extend(Text::from(spans));
+
         match self.fds {
             Ok(ref fds) => {
                 let fd_style = Style::default().fg(Color::Green);
@@ -584,7 +614,15 @@ impl LimitWidget {
 
 impl AppWidget for LimitWidget {
     const TITLE: &'static str = "Limits";
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
+        let spans = Spans::from(vec![
+            Span::raw("The "),
+            Span::styled("Limits", Style::default().fg(Color::Yellow)),
+            Span::raw(" tab shows the process resource limits."),
+        ]);
+        help_text.extend(Text::from(spans));
+
+
         let header_cell_style = Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
         let headers = vec![Cell::from("Type").style(header_cell_style),
             Cell::from("Soft Limit").style(header_cell_style),
@@ -803,7 +841,17 @@ impl TreeWidget {
 
 impl AppWidget for TreeWidget {
     const TITLE: &'static str = "Tree";
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
+        let spans = Spans::from(vec![
+            Span::raw("The "),
+            Span::styled("Tree", Style::default().fg(Color::Yellow)),
+            Span::raw(" tab shows the currently selected process in a process tree. Press "),
+            Span::styled("ctrl-t", Style::default().fg(Color::Green)),
+            Span::raw(" to show only the parent processes and direct children.")
+        ]);
+        help_text.extend(Text::from(spans));
+
+
         let selected_style = Style::default().fg(Color::Magenta);
         let self_style = Style::default().fg(Color::Yellow);
         let unselected_style = Style::default();
@@ -1030,7 +1078,14 @@ impl CGroupWidget {
 
 impl AppWidget for CGroupWidget {
     const TITLE: &'static str = "CGroups";
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
+
+        let spans = Spans::from(vec![
+            Span::raw("The "),
+            Span::styled("CGroups", Style::default().fg(Color::Yellow)),
+            Span::raw(" tab shows info about the active container groups for this process."),
+        ]);
+        help_text.extend(Text::from(spans));
 
         // split the area in half -- the left side is a selectable list of controllers, and the
         // right side is some details about them
@@ -1252,7 +1307,22 @@ impl IOWidget {
 
 impl AppWidget for IOWidget {
     const TITLE: &'static str = "IO";
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
+
+        let spans = Spans::from(vec![
+            Span::raw("The "),
+            Span::styled("IO", Style::default().fg(Color::Yellow)),
+            Span::raw(" tab shows various I/O stats. The "),
+            Span::styled("blue", Style::default().fg(Color::LightCyan)),
+            Span::raw(" graph shows all IO (bytes per sec), the" ),
+            Span::styled("magenta", Style::default().fg(Color::LightMagenta)),
+            Span::raw(" graph shows IO ops per sec, and the "),
+            Span::styled("green", Style::default().fg(Color::LightGreen)),
+            Span::raw(" graph shows disk IO bytes per sec."),
+        ]);
+        help_text.extend(Text::from(spans));
+
+
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .margin(0)
@@ -1493,7 +1563,15 @@ impl TaskWidget {
 }
 impl AppWidget for TaskWidget {
     const TITLE: &'static str = "Task";
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
+
+        let spans = Spans::from(vec![
+            Span::raw("The "),
+            Span::styled("Task", Style::default().fg(Color::Yellow)),
+            Span::raw(" tab shows each thread in the process, its name, and how much CPU it's using."),
+        ]);
+        help_text.extend(Text::from(spans));
+
         let mut text: Vec<Spans> = Vec::new();
 
         if let Ok(tasks) = &self.tasks {
