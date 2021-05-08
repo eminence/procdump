@@ -143,9 +143,9 @@ pub(crate) fn limit_to_string(limit: &LimitValue) -> Cow<'static, str> {
     }
 }
 
-pub(crate) fn get_numlines_from_spans<'t, I>(spans: I, width: usize) -> usize 
-    where
-    I: Iterator<Item = &'t Spans<'t>>
+pub(crate) fn get_numlines_from_spans<'t, I>(spans: I, width: usize) -> usize
+where
+    I: Iterator<Item = &'t Spans<'t>>,
 {
     let mut num_lines = 1;
     for span in spans {
@@ -163,7 +163,6 @@ where
     let mut cur_line_length = 0;
     let mut num_lines = 1;
     for item in i {
-
         // we assume that if there is a newline, it will only be at the *end*
         if item.content.ends_with('\n') {
             cur_line_length += item.content.len() - 1;
@@ -237,35 +236,41 @@ impl Events {
         // spawn a thread to handle keyboard input
         let (tx, rx) = mpsc::channel();
         let kbd_tx = tx.clone();
-        thread::Builder::new().name("kbd-reader".to_owned()).spawn(move || {
-            use termion::event::Event as TEvent;
-            use termion::input::TermRead;
-            let stdin = std::io::stdin();
-            for evt in stdin.events() {
-                if let Err(..) = match evt {
-                    Err(..) => return,
-                    Ok(TEvent::Key(k)) => kbd_tx.send(self::Event::Key(k)),
-                    Ok(TEvent::Mouse(m)) => kbd_tx.send(self::Event::Mouse(m)),
-                    Ok(TEvent::Unsupported(bytes)) => match bytes.as_slice() {
-                        // manual parsing of cursor movement keys in application mode
-                        [0x1b, 79, 65] => kbd_tx.send(self::Event::Key(Key::Up)),
-                        [0x1b, 79, 66] => kbd_tx.send(self::Event::Key(Key::Down)),
-                        [0x1b, 79, 67] => kbd_tx.send(self::Event::Key(Key::Right)),
-                        [0x1b, 79, 68] => kbd_tx.send(self::Event::Key(Key::Left)),
-                        _ => continue,
-                    },
-                } {
+        thread::Builder::new()
+            .name("kbd-reader".to_owned())
+            .spawn(move || {
+                use termion::event::Event as TEvent;
+                use termion::input::TermRead;
+                let stdin = std::io::stdin();
+                for evt in stdin.events() {
+                    if let Err(..) = match evt {
+                        Err(..) => return,
+                        Ok(TEvent::Key(k)) => kbd_tx.send(self::Event::Key(k)),
+                        Ok(TEvent::Mouse(m)) => kbd_tx.send(self::Event::Mouse(m)),
+                        Ok(TEvent::Unsupported(bytes)) => match bytes.as_slice() {
+                            // manual parsing of cursor movement keys in application mode
+                            [0x1b, 79, 65] => kbd_tx.send(self::Event::Key(Key::Up)),
+                            [0x1b, 79, 66] => kbd_tx.send(self::Event::Key(Key::Down)),
+                            [0x1b, 79, 67] => kbd_tx.send(self::Event::Key(Key::Right)),
+                            [0x1b, 79, 68] => kbd_tx.send(self::Event::Key(Key::Left)),
+                            _ => continue,
+                        },
+                    } {
+                        return;
+                    }
+                }
+            })
+            .unwrap();
+
+        thread::Builder::new()
+            .name("tick".to_owned())
+            .spawn(move || loop {
+                thread::sleep(std::time::Duration::from_millis(1500));
+                if let Err(..) = tx.send(self::Event::Tick) {
                     return;
                 }
-            }
-        }).unwrap();
-
-        thread::Builder::new().name("tick".to_owned()).spawn(move || loop {
-            thread::sleep(std::time::Duration::from_millis(1500));
-            if let Err(..) = tx.send(self::Event::Tick) {
-                return;
-            }
-        }).unwrap();
+            })
+            .unwrap();
 
         Events { rx }
     }
@@ -422,7 +427,6 @@ pub(crate) fn get_unix_table() -> HashMap<u32, procfs::net::UnixNetEntry> {
 #[cfg(test)]
 mod tests {
     use tui::text::Span;
-
 
     #[test]
     fn test_boxsize() {

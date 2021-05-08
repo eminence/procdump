@@ -72,10 +72,7 @@ struct TabState<'a> {
 
 impl<'a> TabState<'a> {
     fn new(labels: &'a [&'a str]) -> TabState<'a> {
-        TabState {
-            labels,
-            current_idx: 0,
-        }
+        TabState { labels, current_idx: 0 }
     }
     fn current(&self) -> usize {
         self.current_idx
@@ -162,9 +159,8 @@ impl StatDelta<procfs::process::Stat> {
         if d < Duration::from_millis(100) {
             return 0.0;
         }
-        let cputime_delta = ((self.new.utime - self.old.utime) + (self.new.stime - self.old.stime))
-            as f32
-            / self.tps as f32;
+        let cputime_delta =
+            ((self.new.utime - self.old.utime) + (self.new.stime - self.old.stime)) as f32 / self.tps as f32;
         let usage = cputime_delta / (d.as_millis() as f32 / 1000.0);
 
         usage * 100.0
@@ -376,7 +372,7 @@ impl<'a> App<'a> {
             Span::styled("pgrp:", s),
             Span::raw(format!("{} ", self.proc.stat.pgrp)),
             Span::styled("session:", s),
-            Span::raw(format!("{}", self.proc.stat.session))
+            Span::raw(format!("{}", self.proc.stat.session)),
         ]));
 
         // second line:
@@ -392,13 +388,12 @@ impl<'a> App<'a> {
             } else {
                 Span::raw(format!("X (Dead) "))
             },
-
             Span::styled("started:", s),
             if let Ok(dt) = self.proc.stat.starttime() {
                 Span::raw(format!("{}\n", fmt_time(dt)))
             } else {
                 Span::styled("(unknown)\n", Style::default().fg(Color::Red).bg(Color::Reset))
-            }
+            },
         ]));
 
         // third line:
@@ -408,13 +403,9 @@ impl<'a> App<'a> {
         if let Ok(ref status) = status {
             text.push(Spans::from(vec![
                 Span::styled("owner:", s),
-                Span::raw(format!(
-                    "{}({}) ",
-                    lookup_username(status.ruid),
-                    status.ruid
-                )),
+                Span::raw(format!("{}({}) ", lookup_username(status.ruid), status.ruid)),
                 Span::styled("threads:", s),
-                Span::raw(format!("{}\n", status.threads))
+                Span::raw(format!("{}\n", status.threads)),
             ]));
         }
 
@@ -423,11 +414,10 @@ impl<'a> App<'a> {
 
         text.push(Spans::from(vec![
             Span::styled("nice:", s),
-            Span::raw(format!("{} ", self.proc.stat.nice))
+            Span::raw(format!("{} ", self.proc.stat.nice)),
         ]));
 
-        let widget = Paragraph::new(text)
-            .block(Block::default().borders(Borders::RIGHT));
+        let widget = Paragraph::new(text).block(Block::default().borders(Borders::RIGHT));
         f.render_widget(widget, chunks[0]);
 
         // second block is CPU time info
@@ -443,7 +433,7 @@ impl<'a> App<'a> {
         // cpu usage:0.00%
         text.push(Spans::from(vec![
             Span::styled("cpu usage:", s),
-            Span::raw(format!("{:.2}%", usage))
+            Span::raw(format!("{:.2}%", usage)),
         ]));
 
         // second line:
@@ -451,12 +441,10 @@ impl<'a> App<'a> {
         let percent_user = stat.utime as f32 / (stat.utime + stat.stime) as f32;
 
         text.push(Spans::from(vec![
-
             Span::styled("user time:", s),
             Span::raw(format!("{:?} ", u_time)),
             Span::styled("kernel time:", s),
             Span::raw(format!("{:?} ", s_time)),
-    
             // how much time is in userland
             Span::styled("u/k:", s),
             Span::raw(format!("{:.2}%\n", percent_user * 100.0)),
@@ -466,7 +454,6 @@ impl<'a> App<'a> {
         // virt:12.14 MB rss:5.55 MB shr:3.46 MB
 
         let mut line: Vec<Span> = Vec::new();
-      
 
         if let Ok(ref status) = status {
             // get some memory stats
@@ -480,16 +467,12 @@ impl<'a> App<'a> {
             }
             if let (Some(shr), Some(rss)) = (status.rssshmem, status.rssfile) {
                 line.push(Span::styled("shr:", s));
-                line.push(Span::raw(format!(
-                    "{} ",
-                    fmt_bytes((shr + rss) * 1024, "B")
-                )));
+                line.push(Span::raw(format!("{} ", fmt_bytes((shr + rss) * 1024, "B"))));
             }
         }
         text.push(Spans::from(line));
 
-        let widget = Paragraph::new(text)
-            .block(Block::default().borders(Borders::RIGHT));
+        let widget = Paragraph::new(text).block(Block::default().borders(Borders::RIGHT));
         f.render_widget(widget, chunks[1]);
 
         // third block is help info
@@ -547,7 +530,6 @@ impl<'a> App<'a> {
             ui::TaskWidget::TITLE => {
                 self.task_widget.draw(f, area, help_text);
                 self.task_widget.draw_scrollbar(f, chunks[1]);
-
             }
             t => {
                 panic!("Unhandled tab {}", t);
@@ -636,8 +618,8 @@ fn main() -> anyhow::Result<()> {
                             Constraint::Length(4 + 2), // top fixed-sized info box
                             Constraint::Length(1 + 2), // tab selector
                             Constraint::Min(0),        // tab body
-                            Constraint::Length(10),     // cpu sparkline
-                            // Constraint::Length(5),     // cpu sparkline
+                            Constraint::Length(10),    // cpu sparkline
+                                                       // Constraint::Length(5),     // cpu sparkline
                         ]
                         .as_ref(),
                     )
@@ -650,7 +632,7 @@ fn main() -> anyhow::Result<()> {
                 app.draw_tab_selector(&mut f, chunks[2]);
                 app.draw_tab_body(&mut f, chunks[3], &mut help_text);
                 app.draw_cpu_spark(&mut f, chunks[4]);
-                
+
                 app.draw_top(&mut f, chunks[0], chunks[1], help_text);
             })?;
             need_redraw = false;
@@ -658,9 +640,7 @@ fn main() -> anyhow::Result<()> {
 
         match events.rx.recv() {
             Err(..) => break,
-            Ok(Event::Key(Key::Esc))
-            | Ok(Event::Key(Key::Char('q')))
-            | Ok(Event::Key(Key::Ctrl('c'))) => break,
+            Ok(Event::Key(Key::Esc)) | Ok(Event::Key(Key::Char('q'))) | Ok(Event::Key(Key::Ctrl('c'))) => break,
 
             Ok(Event::Key(k)) => match app.handle_input(k, tab_body_height) {
                 ui::InputResult::NeedsUpdate => {
