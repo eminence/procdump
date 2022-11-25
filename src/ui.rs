@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use std::{borrow::Cow, fs::read_to_string};
 
-use procfs::process::{FDInfo, FDTarget, Process};
+use procfs::process::{FDInfo, FDTarget, Process, FDsIter};
 use procfs::ProcessCgroup;
 use procfs::{
     net::{TcpNetEntry, UdpNetEntry, UnixNetEntry},
@@ -36,7 +36,7 @@ const TEN_SECONDS: Duration = Duration::from_secs(10);
 pub enum InputResult {
     /// The widget needs to be redrawn
     NeedsRedraw,
-    /// The widget needs to be updated with the latest process info (simplies NeedsRedraw)
+    /// The widget needs to be updated with the latest process info (implies NeedsRedraw)
     NeedsUpdate,
     None,
 }
@@ -249,9 +249,9 @@ impl AppWidget for EnvWidget {
 }
 
 pub struct NetWidget {
-    tcp_map: HashMap<u32, TcpNetEntry>,
-    udp_map: HashMap<u32, UdpNetEntry>,
-    unix_map: HashMap<u32, UnixNetEntry>,
+    tcp_map: HashMap<u64, TcpNetEntry>,
+    udp_map: HashMap<u64, UdpNetEntry>,
+    unix_map: HashMap<u64, UnixNetEntry>,
     fd: Result<Vec<FDInfo>, ProcError>,
     last_updated: Instant,
     scroll: ScrollController,
@@ -263,7 +263,7 @@ impl NetWidget {
             tcp_map: crate::util::get_tcp_table(),
             udp_map: crate::util::get_udp_table(),
             unix_map: crate::util::get_unix_table(),
-            fd: proc.fd(),
+            fd: proc.fd().map(|iter| iter.filter_map(|f| f.ok()).collect()),
             last_updated: Instant::now(),
             scroll: ScrollController::new(),
         }
@@ -354,7 +354,7 @@ impl AppWidget for NetWidget {
     }
     fn update(&mut self, proc: &Process) {
         if self.last_updated.elapsed() > TWO_SECONDS {
-            self.fd = proc.fd();
+            self.fd = proc.fd().map(|iter| iter.filter_map(|f| f.ok()).collect());
             self.tcp_map = crate::util::get_tcp_table();
             self.udp_map = crate::util::get_udp_table();
             self.unix_map = crate::util::get_unix_table();
@@ -452,7 +452,7 @@ impl AppWidget for MapsWidget {
 pub struct FilesWidget {
     fds: ProcResult<Vec<procfs::process::FDInfo>>,
     locks: ProcResult<Vec<procfs::Lock>>,
-    pipe_inodes: HashMap<u32, (util::ProcessTreeEntry, util::ProcessTreeEntry)>,
+    pipe_inodes: HashMap<u64, (util::ProcessTreeEntry, util::ProcessTreeEntry)>,
     last_updated: Instant,
     pipes_updated: Instant,
     scroll: ScrollController,
@@ -461,7 +461,7 @@ pub struct FilesWidget {
 impl FilesWidget {
     pub fn new(proc: &Process) -> FilesWidget {
         FilesWidget {
-            fds: proc.fd(),
+            fds: proc.fd().map(|iter| iter.filter_map(|f| f.ok()).collect()),
             locks: util::get_locks_for_pid(proc.pid),
             last_updated: Instant::now(),
             pipe_inodes: util::get_pipe_pairs(),
@@ -563,7 +563,7 @@ impl AppWidget for FilesWidget {
     }
     fn update(&mut self, proc: &Process) {
         if self.last_updated.elapsed() > TWO_SECONDS {
-            self.fds = proc.fd();
+            self.fds = proc.fd().map(|iter| iter.filter_map(|f| f.ok()).collect());
             self.locks = util::get_locks_for_pid(proc.pid);
             self.last_updated = Instant::now();
         }
@@ -1250,7 +1250,7 @@ impl IOWidget {
         //let io = proc.io();
         IOWidget {
             last_updated: Instant::now(),
-            io_d: StatDelta::<procfs::process::Io>::new(proc.clone()),
+            io_d: StatDelta::<procfs::process::Io>::new(proc),
             io_spark: SparklineData::new(),
             ops_spark: SparklineData::new(),
             disk_spark: SparklineData::new(),
@@ -1400,10 +1400,10 @@ impl AppWidget for IOWidget {
             f.render_widget(widget, spark_chunks[idx]);
         }
     }
-    fn update(&mut self, _proc: &Process) {
+    fn update(&mut self, proc: &Process) {
         if self.last_updated.elapsed() > ONE_SECONDS {
             if let Ok(ref mut io_d) = self.io_d {
-                io_d.update();
+                io_d.update(&proc);
 
                 let io = io_d.latest();
                 let prev_io = io_d.previous();

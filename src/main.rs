@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use procfs::process::Process;
+use procfs::process::{Process, self};
 use termion::event::Key;
 use termion::raw::IntoRawMode;
 use tui::layout::{Constraint, Direction, Layout, Rect};
@@ -102,8 +102,7 @@ impl<'a> TabState<'a> {
 }
 
 struct StatDelta<T> {
-    proc: Process,
-    tps: i64,
+    tps: u64,
     old: T,
     old_when: Instant,
     new: T,
@@ -111,11 +110,10 @@ struct StatDelta<T> {
 }
 
 impl StatDelta<procfs::process::Io> {
-    fn new(proc: Process) -> anyhow::Result<StatDelta<procfs::process::Io>> {
+    fn new(proc: &Process) -> anyhow::Result<StatDelta<procfs::process::Io>> {
         let s = proc.io()?;
         let now = Instant::now();
         Ok(StatDelta {
-            proc,
             old: s,
             new: s,
             old_when: now,
@@ -123,8 +121,8 @@ impl StatDelta<procfs::process::Io> {
             tps: procfs::ticks_per_second().unwrap(),
         })
     }
-    fn update(&mut self) {
-        if let Ok(io) = self.proc.io() {
+    fn update(&mut self, proc: &Process) {
+        if let Ok(io) = proc.io() {
             std::mem::swap(&mut self.old, &mut self.new);
             self.old_when = self.new_when;
             self.new = io;
@@ -134,11 +132,10 @@ impl StatDelta<procfs::process::Io> {
 }
 
 impl StatDelta<procfs::process::Stat> {
-    fn new(proc: Process) -> StatDelta<procfs::process::Stat> {
-        let s = proc.stat.clone();
+    fn new(proc: &Process) -> StatDelta<procfs::process::Stat> {
+        let s = proc.stat().unwrap().clone();
         let now = Instant::now();
         StatDelta {
-            proc,
             old: s.clone(),
             new: s,
             old_when: now,
@@ -146,8 +143,8 @@ impl StatDelta<procfs::process::Stat> {
             tps: procfs::ticks_per_second().unwrap(),
         }
     }
-    fn update(&mut self) {
-        if let Ok(new_stat) = self.proc.stat() {
+    fn update(&mut self, proc: &Process) {
+        if let Ok(new_stat) = proc.stat() {
             std::mem::swap(&mut self.old, &mut self.new);
             self.old_when = self.new_when;
             self.new = new_stat;
@@ -206,8 +203,9 @@ impl SparklineData {
 }
 
 pub struct App<'a> {
-    tps: i64,
+    tps: u64,
     proc: Process,
+    proc_stat: process::Stat,
     env_widget: ui::EnvWidget,
     net_widget: ui::NetWidget,
     maps_widget: ui::MapsWidget,
@@ -235,7 +233,7 @@ impl<'a> App<'a> {
             io_widget: ui::IOWidget::new(&proc),
             task_widget: ui::TaskWidget::new(&proc),
             tps: procfs::ticks_per_second().unwrap(),
-            stat_d: StatDelta::<procfs::process::Stat>::new(proc.clone()),
+            stat_d: StatDelta::<procfs::process::Stat>::new(&proc),
             tab: TabState::new(&[
                 ui::EnvWidget::TITLE,
                 ui::NetWidget::TITLE,
@@ -248,6 +246,7 @@ impl<'a> App<'a> {
                 ui::TaskWidget::TITLE,
             ]),
             cpu_spark: SparklineData::new(),
+            proc_stat: proc.stat().unwrap(),
             proc,
         }
     }
@@ -263,7 +262,7 @@ impl<'a> App<'a> {
             self.cgroup_widget = ui::CGroupWidget::new(&proc);
             self.task_widget = ui::TaskWidget::new(&proc);
             self.io_widget = ui::IOWidget::new(&proc);
-            self.stat_d = StatDelta::<procfs::process::Stat>::new(proc.clone());
+            self.stat_d = StatDelta::<procfs::process::Stat>::new(&proc);
             self.cpu_spark = SparklineData::new();
             self.proc = proc;
         }
@@ -282,7 +281,7 @@ impl<'a> App<'a> {
             ui::TreeWidget::TITLE => {
                 if input == Key::Char('\n') {
                     let new_pid = self.tree_widget.get_selected_pid();
-                    if new_pid != self.proc.stat.pid {
+                    if new_pid != self.proc.stat().unwrap().pid {
                         self.switch_to(new_pid);
                         return ui::InputResult::NeedsUpdate;
                     }
@@ -316,7 +315,7 @@ impl<'a> App<'a> {
             self.cgroup_widget.update(&self.proc);
             self.io_widget.update(&self.proc);
             self.task_widget.update(&self.proc);
-            self.stat_d.update();
+            self.stat_d.update(&self.proc);
 
             let cpu_usage = self.stat_d.cpu_percentage();
             self.cpu_spark.push(cpu_usage.round() as u64);
@@ -338,7 +337,7 @@ impl<'a> App<'a> {
                 text.push(Span::raw(" "));
             }
         } else {
-            text.push(Span::raw(format!("\u{2500} {} ", self.proc.stat.comm)));
+            text.push(Span::raw(format!("\u{2500} {} ", self.proc.stat().unwrap().comm)));
         }
 
         text.push(Span::raw("\u{2500}".repeat(top_area.width as usize)));
@@ -366,13 +365,13 @@ impl<'a> App<'a> {
         // pid:19610 ppid:8959 pgrp:19610 session:8959
         text.push(Spans::from(vec![
             Span::styled("pid:", s),
-            Span::raw(format!("{} ", self.proc.stat.pid)),
+            Span::raw(format!("{} ", self.proc_stat.pid)),
             Span::styled("ppid:", s),
-            Span::raw(format!("{} ", self.proc.stat.ppid)),
+            Span::raw(format!("{} ", self.proc_stat.ppid)),
             Span::styled("pgrp:", s),
-            Span::raw(format!("{} ", self.proc.stat.pgrp)),
+            Span::raw(format!("{} ", self.proc_stat.pgrp)),
             Span::styled("session:", s),
-            Span::raw(format!("{}", self.proc.stat.session)),
+            Span::raw(format!("{}", self.proc_stat.session)),
         ]));
 
         // second line:
@@ -382,14 +381,14 @@ impl<'a> App<'a> {
             if self.proc.is_alive() {
                 Span::raw(format!(
                     "{} ({:?}) ",
-                    self.proc.stat.state,
-                    self.proc.stat.state().unwrap()
+                    self.proc_stat.state,
+                    self.proc_stat.state().unwrap()
                 ))
             } else {
                 Span::raw(format!("X (Dead) "))
             },
             Span::styled("started:", s),
-            if let Ok(dt) = self.proc.stat.starttime() {
+            if let Ok(dt) = self.proc_stat.starttime() {
                 Span::raw(format!("{}\n", fmt_time(dt)))
             } else {
                 Span::styled("(unknown)\n", Style::default().fg(Color::Red).bg(Color::Reset))
@@ -414,7 +413,7 @@ impl<'a> App<'a> {
 
         text.push(Spans::from(vec![
             Span::styled("nice:", s),
-            Span::raw(format!("{} ", self.proc.stat.nice)),
+            Span::raw(format!("{} ", self.proc_stat.nice)),
         ]));
 
         let widget = Paragraph::new(text).block(Block::default().borders(Borders::RIGHT));

@@ -67,8 +67,11 @@ impl ProcessTree {
         let mut map: HashMap<i32, ProcessTreeEntry> = HashMap::new();
 
         for proc in all {
-            child_map.entry(proc.stat.ppid).or_default().push(proc.pid);
-            procs.insert(proc.pid, proc);
+            if let Ok(proc) = proc {
+                let proc_stat = proc.stat().unwrap();
+                child_map.entry(proc_stat.ppid).or_default().push(proc.pid);
+                procs.insert(proc.pid, proc);
+            }
         }
 
         let root_proc = procs.get(&1).unwrap();
@@ -78,7 +81,7 @@ impl ProcessTree {
             cmdline: root_proc
                 .cmdline()
                 .ok()
-                .map_or(root_proc.stat.comm.clone(), |cmdline| cmdline.join(" ")),
+                .map_or(root_proc.stat()?.comm.clone(), |cmdline| cmdline.join(" ")),
             children: Vec::new(),
             num_siblings: 0,
         };
@@ -98,8 +101,9 @@ impl ProcessTree {
             let mut focus_pid = focus.pid;
 
             while let Some(entry) = procs.get(&focus_pid) {
-                pids_to_keep.push(entry.stat.ppid);
-                focus_pid = entry.stat.ppid;
+                let proc_stat = entry.stat()?;
+                pids_to_keep.push(proc_stat.ppid);
+                focus_pid = proc_stat.ppid;
             }
 
             map.retain(|key, _entry| pids_to_keep.contains(key));
@@ -124,7 +128,7 @@ fn build_entry(
                 cmdline: p
                     .cmdline()
                     .ok()
-                    .map_or(p.stat.comm.clone(), |cmdline| cmdline.join(" ")),
+                    .map_or(p.stat().unwrap().comm.clone(), |cmdline| cmdline.join(" ")),
                 children: Vec::new(),
                 num_siblings: child_pids.len() as u32,
             };
@@ -341,19 +345,20 @@ pub(crate) fn get_locks_for_pid(pid: i32) -> ProcResult<Vec<procfs::Lock>> {
     })
 }
 
-pub(crate) fn get_pipe_pairs() -> HashMap<u32, (ProcessTreeEntry, ProcessTreeEntry)> {
+pub(crate) fn get_pipe_pairs() -> HashMap<u64, (ProcessTreeEntry, ProcessTreeEntry)> {
     let mut read_map = HashMap::new();
     let mut write_map = HashMap::new();
 
     if let Ok(procs) = procfs::process::all_processes() {
-        for proc in procs {
+        for proc in procs.filter_map(|p| p.ok()) {
             if let Ok(fds) = proc.fd() {
-                for fd in fds {
+                let proc_stat = proc.stat().unwrap();
+                for fd in fds.filter_map(|fd| fd.ok()) {
                     if let procfs::process::FDTarget::Pipe(uid) = fd.target {
                         let pti = ProcessTreeEntry {
                             pid: proc.pid,
-                            ppid: proc.stat.ppid,
-                            cmdline: proc.stat.comm.clone(),
+                            ppid: proc_stat.ppid,
+                            cmdline: proc_stat.comm.clone(),
                             children: Vec::new(),
                             num_siblings: 0,
                         };
@@ -378,7 +383,7 @@ pub(crate) fn get_pipe_pairs() -> HashMap<u32, (ProcessTreeEntry, ProcessTreeEnt
     map
 }
 
-pub(crate) fn get_tcp_table() -> HashMap<u32, procfs::net::TcpNetEntry> {
+pub(crate) fn get_tcp_table() -> HashMap<u64, procfs::net::TcpNetEntry> {
     let mut map = HashMap::new();
 
     if let Ok(tcp) = procfs::net::tcp() {
@@ -395,7 +400,7 @@ pub(crate) fn get_tcp_table() -> HashMap<u32, procfs::net::TcpNetEntry> {
     map
 }
 
-pub(crate) fn get_udp_table() -> HashMap<u32, procfs::net::UdpNetEntry> {
+pub(crate) fn get_udp_table() -> HashMap<u64, procfs::net::UdpNetEntry> {
     let mut map = HashMap::new();
 
     if let Ok(udp) = procfs::net::udp() {
@@ -412,7 +417,7 @@ pub(crate) fn get_udp_table() -> HashMap<u32, procfs::net::UdpNetEntry> {
     map
 }
 
-pub(crate) fn get_unix_table() -> HashMap<u32, procfs::net::UnixNetEntry> {
+pub(crate) fn get_unix_table() -> HashMap<u64, procfs::net::UnixNetEntry> {
     let mut map = HashMap::new();
 
     if let Ok(unix) = procfs::net::unix() {
