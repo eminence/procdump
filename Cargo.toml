@@ -12,8 +12,8 @@ license = "MIT OR Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-procfs = "0.13"
-terminal_size = "0.1.8"
+procfs = "0.14"
+terminal_size = "0.2"
 libc = "0.2"
 tui = "0.14"
 termion = "1.5"
