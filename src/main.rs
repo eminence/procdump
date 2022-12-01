@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 use procfs::process::{Process, self};
 use termion::event::Key;
 use termion::raw::IntoRawMode;
+use termion::screen::IntoAlternateScreen;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::*;
 use tui::terminal::{Frame, Terminal};
@@ -594,7 +595,7 @@ fn main() -> anyhow::Result<()> {
 
     let events = util::Events::new();
 
-    let stdout = termion::screen::AlternateScreen::from(std::io::stdout().into_raw_mode()?);
+    let stdout = termion::screen::AlternateScreen::from(std::io::stdout().into_raw_mode()?.into_alternate_screen()?);
     let backend = TermionBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
     terminal.hide_cursor()?;
