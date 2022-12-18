@@ -16,9 +16,9 @@ use tui::{
 // pub const ERROR_STYLE: Style = Style::default().fg(Color::Red).bg(Color::Reset);
 
 mod util;
+use ui::widgets::AppWidget;
 use util::*;
 mod ui;
-use ui::AppWidget;
 
 use std::fmt::Debug;
 
@@ -207,15 +207,15 @@ pub struct App<'a> {
     tps: u64,
     proc: Process,
     proc_stat: process::Stat,
-    env_widget: ui::EnvWidget,
-    net_widget: ui::NetWidget,
-    maps_widget: ui::MapsWidget,
-    files_widget: ui::FilesWidget,
-    limit_widget: ui::LimitWidget,
-    tree_widget: ui::TreeWidget,
-    cgroup_widget: ui::CGroupWidget,
-    io_widget: ui::IOWidget,
-    task_widget: ui::TaskWidget,
+    env_widget: ui::widgets::env::EnvWidget,
+    net_widget: ui::widgets::net::NetWidget,
+    maps_widget: ui::widgets::maps::MapsWidget,
+    files_widget: ui::widgets::files::FilesWidget,
+    limit_widget: ui::widgets::limit::LimitWidget,
+    tree_widget: ui::widgets::tree::TreeWidget,
+    cgroup_widget: ui::widgets::cgroup::CGroupWidget,
+    io_widget: ui::widgets::io::IOWidget,
+    task_widget: ui::widgets::task::TaskWidget,
     tab: TabState<'a>,
     stat_d: StatDelta<procfs::process::Stat>,
     cpu_spark: SparklineData,
@@ -224,27 +224,27 @@ pub struct App<'a> {
 impl<'a> App<'a> {
     fn new(proc: Process) -> App<'a> {
         App {
-            env_widget: ui::EnvWidget::new(&proc),
-            net_widget: ui::NetWidget::new(&proc),
-            maps_widget: ui::MapsWidget::new(&proc),
-            files_widget: ui::FilesWidget::new(&proc),
-            limit_widget: ui::LimitWidget::new(&proc),
-            tree_widget: ui::TreeWidget::new(&proc),
-            cgroup_widget: ui::CGroupWidget::new(&proc),
-            io_widget: ui::IOWidget::new(&proc),
-            task_widget: ui::TaskWidget::new(&proc),
+            env_widget: ui::widgets::EnvWidget::new(&proc),
+            net_widget: ui::widgets::NetWidget::new(&proc),
+            maps_widget: ui::widgets::MapsWidget::new(&proc),
+            files_widget: ui::widgets::FilesWidget::new(&proc),
+            limit_widget: ui::widgets::LimitWidget::new(&proc),
+            tree_widget: ui::widgets::TreeWidget::new(&proc),
+            cgroup_widget: ui::widgets::CGroupWidget::new(&proc),
+            io_widget: ui::widgets::IOWidget::new(&proc),
+            task_widget: ui::widgets::TaskWidget::new(&proc),
             tps: procfs::ticks_per_second().unwrap(),
             stat_d: StatDelta::<procfs::process::Stat>::new(&proc),
             tab: TabState::new(&[
-                ui::EnvWidget::TITLE,
-                ui::NetWidget::TITLE,
-                ui::MapsWidget::TITLE,
-                ui::FilesWidget::TITLE,
-                ui::LimitWidget::TITLE,
-                ui::TreeWidget::TITLE,
-                ui::CGroupWidget::TITLE,
-                ui::IOWidget::TITLE,
-                ui::TaskWidget::TITLE,
+                ui::widgets::EnvWidget::TITLE,
+                ui::widgets::NetWidget::TITLE,
+                ui::widgets::MapsWidget::TITLE,
+                ui::widgets::FilesWidget::TITLE,
+                ui::widgets::LimitWidget::TITLE,
+                ui::widgets::TreeWidget::TITLE,
+                ui::widgets::CGroupWidget::TITLE,
+                ui::widgets::IOWidget::TITLE,
+                ui::widgets::TaskWidget::TITLE,
             ]),
             cpu_spark: SparklineData::new(),
             proc_stat: proc.stat().unwrap(),
@@ -254,15 +254,15 @@ impl<'a> App<'a> {
 
     fn switch_to(&mut self, new_pid: i32) {
         if let Ok(proc) = Process::new(new_pid) {
-            self.env_widget = ui::EnvWidget::new(&proc);
-            self.net_widget = ui::NetWidget::new(&proc);
-            self.maps_widget = ui::MapsWidget::new(&proc);
-            self.files_widget = ui::FilesWidget::new(&proc);
-            self.limit_widget = ui::LimitWidget::new(&proc);
-            self.tree_widget = ui::TreeWidget::new(&proc);
-            self.cgroup_widget = ui::CGroupWidget::new(&proc);
-            self.task_widget = ui::TaskWidget::new(&proc);
-            self.io_widget = ui::IOWidget::new(&proc);
+            self.env_widget = ui::widgets::EnvWidget::new(&proc);
+            self.net_widget = ui::widgets::NetWidget::new(&proc);
+            self.maps_widget = ui::widgets::MapsWidget::new(&proc);
+            self.files_widget = ui::widgets::FilesWidget::new(&proc);
+            self.limit_widget = ui::widgets::LimitWidget::new(&proc);
+            self.tree_widget = ui::widgets::TreeWidget::new(&proc);
+            self.cgroup_widget = ui::widgets::CGroupWidget::new(&proc);
+            self.task_widget = ui::widgets::TaskWidget::new(&proc);
+            self.io_widget = ui::widgets::IOWidget::new(&proc);
             self.stat_d = StatDelta::<procfs::process::Stat>::new(&proc);
             self.cpu_spark = SparklineData::new();
             self.proc = proc;
@@ -271,15 +271,15 @@ impl<'a> App<'a> {
 
     fn handle_input(&mut self, input: Key, height: u16) -> ui::InputResult {
         let widget_redraw = match self.tab.current_label() {
-            ui::EnvWidget::TITLE => self.env_widget.handle_input(input, height),
-            ui::NetWidget::TITLE => self.net_widget.handle_input(input, height),
-            ui::MapsWidget::TITLE => self.maps_widget.handle_input(input, height),
-            ui::FilesWidget::TITLE => self.files_widget.handle_input(input, height),
-            ui::LimitWidget::TITLE => self.limit_widget.handle_input(input, height),
-            ui::CGroupWidget::TITLE => self.cgroup_widget.handle_input(input, height),
-            ui::IOWidget::TITLE => self.io_widget.handle_input(input, height),
-            ui::TaskWidget::TITLE => self.task_widget.handle_input(input, height),
-            ui::TreeWidget::TITLE => {
+            ui::widgets::EnvWidget::TITLE => self.env_widget.handle_input(input, height),
+            ui::widgets::NetWidget::TITLE => self.net_widget.handle_input(input, height),
+            ui::widgets::MapsWidget::TITLE => self.maps_widget.handle_input(input, height),
+            ui::widgets::FilesWidget::TITLE => self.files_widget.handle_input(input, height),
+            ui::widgets::LimitWidget::TITLE => self.limit_widget.handle_input(input, height),
+            ui::widgets::CGroupWidget::TITLE => self.cgroup_widget.handle_input(input, height),
+            ui::widgets::IOWidget::TITLE => self.io_widget.handle_input(input, height),
+            ui::widgets::TaskWidget::TITLE => self.task_widget.handle_input(input, height),
+            ui::widgets::TreeWidget::TITLE => {
                 if input == Key::Char('\n') {
                     let new_pid = self.tree_widget.get_selected_pid();
                     if new_pid != self.proc.stat().unwrap().pid {
@@ -499,35 +499,35 @@ impl<'a> App<'a> {
             .split(area);
 
         match self.tab.current_label() {
-            ui::EnvWidget::TITLE => {
+            ui::widgets::EnvWidget::TITLE => {
                 self.env_widget.draw(f, chunks[0], help_text);
                 self.env_widget.draw_scrollbar(f, chunks[1]);
             }
-            ui::NetWidget::TITLE => {
+            ui::widgets::NetWidget::TITLE => {
                 self.net_widget.draw(f, chunks[0], help_text);
                 self.net_widget.draw_scrollbar(f, chunks[1]);
             }
-            ui::MapsWidget::TITLE => {
+            ui::widgets::MapsWidget::TITLE => {
                 self.maps_widget.draw(f, chunks[0], help_text);
                 self.maps_widget.draw_scrollbar(f, chunks[1]);
             }
-            ui::FilesWidget::TITLE => {
+            ui::widgets::FilesWidget::TITLE => {
                 self.files_widget.draw(f, chunks[0], help_text);
                 self.files_widget.draw_scrollbar(f, chunks[1]);
             }
-            ui::LimitWidget::TITLE => {
+            ui::widgets::LimitWidget::TITLE => {
                 self.limit_widget.draw(f, area, help_text);
             }
-            ui::TreeWidget::TITLE => {
+            ui::widgets::TreeWidget::TITLE => {
                 self.tree_widget.draw(f, area, help_text);
             }
-            ui::CGroupWidget::TITLE => {
+            ui::widgets::CGroupWidget::TITLE => {
                 self.cgroup_widget.draw(f, area, help_text);
             }
-            ui::IOWidget::TITLE => {
+            ui::widgets::IOWidget::TITLE => {
                 self.io_widget.draw(f, area, help_text);
             }
-            ui::TaskWidget::TITLE => {
+            ui::widgets::TaskWidget::TITLE => {
                 self.task_widget.draw(f, area, help_text);
                 self.task_widget.draw_scrollbar(f, chunks[1]);
             }
