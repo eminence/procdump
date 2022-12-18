@@ -49,7 +49,7 @@ impl AppWidget for IOWidget {
             Span::styled("IO", Style::default().fg(Color::Yellow)),
             Span::raw(" tab shows various I/O stats. The "),
             Span::styled("blue", Style::default().fg(Color::LightCyan)),
-            Span::raw(" graph shows all IO (bytes per sec), the"),
+            Span::raw(" graph shows all IO (bytes per sec), the "),
             Span::styled("magenta", Style::default().fg(Color::LightMagenta)),
             Span::raw(" graph shows IO ops per sec, and the "),
             Span::styled("green", Style::default().fg(Color::LightGreen)),

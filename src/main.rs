@@ -207,15 +207,16 @@ pub struct App<'a> {
     tps: u64,
     proc: Process,
     proc_stat: process::Stat,
-    env_widget: ui::widgets::env::EnvWidget,
-    net_widget: ui::widgets::net::NetWidget,
-    maps_widget: ui::widgets::maps::MapsWidget,
-    files_widget: ui::widgets::files::FilesWidget,
-    limit_widget: ui::widgets::limit::LimitWidget,
-    tree_widget: ui::widgets::tree::TreeWidget,
-    cgroup_widget: ui::widgets::cgroup::CGroupWidget,
-    io_widget: ui::widgets::io::IOWidget,
-    task_widget: ui::widgets::task::TaskWidget,
+    env_widget: ui::widgets::EnvWidget,
+    net_widget: ui::widgets::NetWidget,
+    maps_widget: ui::widgets::MapsWidget,
+    mem_widget: ui::widgets::MemWidget,
+    files_widget: ui::widgets::FilesWidget,
+    limit_widget: ui::widgets::LimitWidget,
+    tree_widget: ui::widgets::TreeWidget,
+    cgroup_widget: ui::widgets::CGroupWidget,
+    io_widget: ui::widgets::IOWidget,
+    task_widget: ui::widgets::TaskWidget,
     tab: TabState<'a>,
     stat_d: StatDelta<procfs::process::Stat>,
     cpu_spark: SparklineData,
@@ -227,6 +228,7 @@ impl<'a> App<'a> {
             env_widget: ui::widgets::EnvWidget::new(&proc),
             net_widget: ui::widgets::NetWidget::new(&proc),
             maps_widget: ui::widgets::MapsWidget::new(&proc),
+            mem_widget: ui::widgets::MemWidget::new(&proc),
             files_widget: ui::widgets::FilesWidget::new(&proc),
             limit_widget: ui::widgets::LimitWidget::new(&proc),
             tree_widget: ui::widgets::TreeWidget::new(&proc),
@@ -239,6 +241,7 @@ impl<'a> App<'a> {
                 ui::widgets::EnvWidget::TITLE,
                 ui::widgets::NetWidget::TITLE,
                 ui::widgets::MapsWidget::TITLE,
+                ui::widgets::MemWidget::TITLE,
                 ui::widgets::FilesWidget::TITLE,
                 ui::widgets::LimitWidget::TITLE,
                 ui::widgets::TreeWidget::TITLE,
@@ -252,11 +255,13 @@ impl<'a> App<'a> {
         }
     }
 
+    /// Called when we need to switch to a new process
     fn switch_to(&mut self, new_pid: i32) {
         if let Ok(proc) = Process::new(new_pid) {
             self.env_widget = ui::widgets::EnvWidget::new(&proc);
             self.net_widget = ui::widgets::NetWidget::new(&proc);
             self.maps_widget = ui::widgets::MapsWidget::new(&proc);
+            self.mem_widget = ui::widgets::MemWidget::new(&proc);
             self.files_widget = ui::widgets::FilesWidget::new(&proc);
             self.limit_widget = ui::widgets::LimitWidget::new(&proc);
             self.tree_widget = ui::widgets::TreeWidget::new(&proc);
@@ -274,6 +279,7 @@ impl<'a> App<'a> {
             ui::widgets::EnvWidget::TITLE => self.env_widget.handle_input(input, height),
             ui::widgets::NetWidget::TITLE => self.net_widget.handle_input(input, height),
             ui::widgets::MapsWidget::TITLE => self.maps_widget.handle_input(input, height),
+            ui::widgets::MemWidget::TITLE => self.mem_widget.handle_input(input, height),
             ui::widgets::FilesWidget::TITLE => self.files_widget.handle_input(input, height),
             ui::widgets::LimitWidget::TITLE => self.limit_widget.handle_input(input, height),
             ui::widgets::CGroupWidget::TITLE => self.cgroup_widget.handle_input(input, height),
@@ -310,6 +316,8 @@ impl<'a> App<'a> {
         if self.proc.is_alive() {
             self.env_widget.update(&self.proc);
             self.net_widget.update(&self.proc);
+            self.maps_widget.update(&self.proc);
+            self.mem_widget.update(&self.proc);
             self.files_widget.update(&self.proc);
             self.limit_widget.update(&self.proc);
             self.tree_widget.update(&self.proc);
@@ -511,6 +519,9 @@ impl<'a> App<'a> {
                 self.maps_widget.draw(f, chunks[0], help_text);
                 self.maps_widget.draw_scrollbar(f, chunks[1]);
             }
+            ui::widgets::MemWidget::TITLE => {
+                self.mem_widget.draw(f, chunks[0], help_text);
+            }
             ui::widgets::FilesWidget::TITLE => {
                 self.files_widget.draw(f, chunks[0], help_text);
                 self.files_widget.draw_scrollbar(f, chunks[1]);
@@ -618,7 +629,7 @@ fn main() -> anyhow::Result<()> {
                             Constraint::Length(4 + 2), // top fixed-sized info box
                             Constraint::Length(1 + 2), // tab selector
                             Constraint::Min(0),        // tab body
-                            Constraint::Length(10),    // cpu sparkline
+                            Constraint::Length(5),     // cpu sparkline
                                                        // Constraint::Length(5),     // cpu sparkline
                         ]
                         .as_ref(),

@@ -112,9 +112,8 @@ impl ScrollController {
         let pageupdown_size = height / 3;
         match input {
             Key::Down | Key::PageDown | Key::End => {
-                let to_move = std::cmp::max(self.max_scroll as i32 - self.scroll_offset as i32, 0);
-                let to_move = std::cmp::min(
-                    to_move,
+                let to_move = (self.max_scroll as i32 - self.scroll_offset as i32).clamp(
+                    0,
                     if input == Key::PageDown {
                         pageupdown_size
                     } else if input == Key::End {

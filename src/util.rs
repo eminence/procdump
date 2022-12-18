@@ -125,10 +125,7 @@ fn build_entry(
             let mut child_entry = ProcessTreeEntry {
                 pid: *child_pid,
                 ppid: entry.pid,
-                cmdline: p
-                    .cmdline()
-                    .ok()
-                    .map_or( stat.comm.clone(), |cmdline| cmdline.join(" ")),
+                cmdline: p.cmdline().ok().map_or(stat.comm.clone(), |cmdline| cmdline.join(" ")),
                 children: Vec::new(),
                 num_siblings: child_pids.len() as u32,
             };

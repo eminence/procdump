@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use procfs::{
-    process::{MMapPath, Process},
+    process::{MMapPath, MemoryMap, MemoryMapData, Process},
     ProcResult,
 };
 use termion::event::Key;
@@ -14,12 +14,21 @@ use tui::{
     Frame,
 };
 
-use crate::ui::{InputResult, ScrollController, TWO_SECONDS};
+use crate::{
+    ui::{InputResult, ScrollController, TWO_SECONDS},
+    util::fmt_bytes,
+};
 
 use super::AppWidget;
 
+enum Maps {
+    Maps(ProcResult<Vec<MemoryMap>>),
+    SMaps(ProcResult<Vec<(MemoryMap, MemoryMapData)>>),
+}
+
 pub struct MapsWidget {
-    maps: ProcResult<Vec<procfs::process::MemoryMap>>,
+    maps: Maps,
+    want_smaps: bool,
     last_updated: Instant,
     scroll: ScrollController,
 }
@@ -27,7 +36,8 @@ pub struct MapsWidget {
 impl MapsWidget {
     pub fn new(proc: &Process) -> MapsWidget {
         MapsWidget {
-            maps: proc.maps(),
+            maps: Maps::Maps(proc.maps()),
+            want_smaps: false,
             last_updated: Instant::now(),
             scroll: ScrollController::new(),
         }
@@ -50,7 +60,7 @@ impl AppWidget for MapsWidget {
         help_text.extend(Text::from(spans));
 
         match &self.maps {
-            Ok(maps) => {
+            Maps::Maps(Ok(maps)) => {
                 for map in maps {
                     let mut line = vec![
                         Span::raw(format!("0x{:012x}-0x{:012x} ", map.address.0, map.address.1)),
@@ -75,7 +85,56 @@ impl AppWidget for MapsWidget {
                     text.push(Spans::from(line));
                 }
             }
-            Err(ref e) => {
+            Maps::SMaps(Ok(maps)) => {
+                let header_style = Style::default().fg(Color::Magenta);
+                text.push(Spans::from(vec![
+                    Span::styled(format!("{:29} ", "Address"), header_style),
+                    Span::styled("Flag ", header_style),
+                    Span::styled("Offset     ", header_style),
+                    Span::styled("Size       ", header_style),
+                    Span::styled("Rss        ", header_style),
+                ]));
+                for (map, map_data) in maps {
+                    let mut line = vec![
+                        Span::raw(format!("0x{:012x}-0x{:012x} ", map.address.0, map.address.1)),
+                        Span::raw(format!("{:4} ", map.perms)),
+                        Span::raw(format!("0x{: <8x} ", map.offset)),
+                        Span::raw(format!(
+                            "{:10} ",
+                            map_data
+                                .map
+                                .get("Size")
+                                .map(|b| fmt_bytes(*b, "B"))
+                                .unwrap_or_else(|| "?".into()),
+                        )),
+                        Span::raw(format!(
+                            "{:10} ",
+                            map_data
+                                .map
+                                .get("Rss")
+                                .map(|b| fmt_bytes(*b, "B"))
+                                .unwrap_or_else(|| "?".into()),
+                        )),
+                    ];
+                    match &map.pathname {
+                        MMapPath::Path(path) => line.push(Span::styled(
+                            format!("{}\n", path.display()),
+                            Style::default().fg(Color::Magenta),
+                        )),
+                        p @ MMapPath::Heap
+                        | p @ MMapPath::Stack
+                        | p @ MMapPath::Vdso
+                        | p @ MMapPath::Vvar
+                        | p @ MMapPath::Vsyscall
+                        | p @ MMapPath::Anonymous => {
+                            line.push(Span::styled(format!("{p:?}\n"), Style::default().fg(Color::Green)))
+                        }
+                        p => line.push(Span::raw(format!("{p:?}"))),
+                    }
+                    text.push(Spans::from(line));
+                }
+            }
+            Maps::Maps(Err(ref e)) | Maps::SMaps(Err(ref e)) => {
                 text.push(Spans::from(Span::styled(
                     format!("Error getting maps: {e}"),
                     Style::default().fg(Color::Red).bg(Color::Reset),
@@ -92,11 +151,19 @@ impl AppWidget for MapsWidget {
     }
     fn update(&mut self, proc: &Process) {
         if self.last_updated.elapsed() > TWO_SECONDS {
-            self.maps = proc.maps();
+            if self.want_smaps {
+                self.maps = Maps::SMaps(proc.smaps());
+            } else {
+                self.maps = Maps::Maps(proc.maps());
+            }
             self.last_updated = Instant::now();
         }
     }
     fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
+        if let Key::Char('d') = input {
+            self.want_smaps = !self.want_smaps;
+            return InputResult::NeedsUpdate;
+        }
         From::from(self.scroll.handle_input(input, height))
     }
 }
