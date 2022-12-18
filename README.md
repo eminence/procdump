@@ -21,9 +21,9 @@ Procdump can show the following information about a given process:
 
 # Install
 
-Install the latest published version:
+Install the latest version from git:
 
-> cargo install procdump
+> cargo install --git https://github.com/eminence/procdump
 
 Or clone and build from source.  Install [rust](https://rustup.rs/), download the source, and then run:
 
