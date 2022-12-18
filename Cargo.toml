@@ -6,7 +6,7 @@ description = "A console program to display detailed information about a running
 homepage = "https://github.com/eminence/procdump"
 repository = "https://github.com/eminence/procdump"
 readme = "README.md"
-edition = "2018"
+edition = "2021"
 license = "MIT OR Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

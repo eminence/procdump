@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use procfs::process::{Process, self};
+use procfs::process::{self, Process};
 use termion::event::Key;
 use termion::raw::IntoRawMode;
 use termion::screen::IntoAlternateScreen;
@@ -50,17 +50,17 @@ pub fn set_panic_handler() {
             let _ = writeln!(file, "Panic!");
             let payload = info.payload();
             if let Some(m) = payload.downcast_ref::<&str>() {
-                let _ = writeln!(file, "{}", m);
+                let _ = writeln!(file, "{m}");
             } else if let Some(m) = payload.downcast_ref::<String>() {
-                let _ = writeln!(file, "{}", m);
+                let _ = writeln!(file, "{m}");
             } else {
-                let _ = writeln!(file, "{:?}", payload);
+                let _ = writeln!(file, "{payload:?}");
             }
 
             if let Some(loc) = info.location() {
-                let _ = writeln!(file, "Location: {}", loc);
+                let _ = writeln!(file, "Location: {loc}");
             }
-            let _ = writeln!(file, "\n{:?}", bt);
+            let _ = writeln!(file, "\n{bt:?}");
         }
         old_hook(info)
     }));
@@ -79,7 +79,7 @@ impl<'a> TabState<'a> {
         self.current_idx
     }
     fn current_label(&self) -> &'a str {
-        &self.labels[self.current_idx]
+        self.labels[self.current_idx]
     }
     fn select_next(&mut self) {
         self.current_idx = (self.current_idx + 1) % self.labels.len();
@@ -93,7 +93,7 @@ impl<'a> TabState<'a> {
     }
     fn select_by_char(&mut self, c: char) -> ui::InputResult {
         for (idx, label) in self.labels.iter().enumerate() {
-            if label.chars().next() == Some(c) {
+            if label.starts_with(c) {
                 self.current_idx = idx;
                 return ui::InputResult::NeedsRedraw;
             }
@@ -134,7 +134,7 @@ impl StatDelta<procfs::process::Io> {
 
 impl StatDelta<procfs::process::Stat> {
     fn new(proc: &Process) -> StatDelta<procfs::process::Stat> {
-        let s = proc.stat().unwrap().clone();
+        let s = proc.stat().unwrap();
         let now = Instant::now();
         StatDelta {
             old: s.clone(),
@@ -386,7 +386,7 @@ impl<'a> App<'a> {
                     self.proc_stat.state().unwrap()
                 ))
             } else {
-                Span::raw(format!("X (Dead) "))
+                Span::raw("X (Dead) ".to_string())
             },
             Span::styled("started:", s),
             if let Ok(dt) = self.proc_stat.starttime() {
@@ -433,7 +433,7 @@ impl<'a> App<'a> {
         // cpu usage:0.00%
         text.push(Spans::from(vec![
             Span::styled("cpu usage:", s),
-            Span::raw(format!("{:.2}%", usage)),
+            Span::raw(format!("{usage:.2}%")),
         ]));
 
         // second line:
@@ -442,9 +442,9 @@ impl<'a> App<'a> {
 
         text.push(Spans::from(vec![
             Span::styled("user time:", s),
-            Span::raw(format!("{:?} ", u_time)),
+            Span::raw(format!("{u_time:?} ")),
             Span::styled("kernel time:", s),
-            Span::raw(format!("{:?} ", s_time)),
+            Span::raw(format!("{s_time:?} ")),
             // how much time is in userland
             Span::styled("u/k:", s),
             Span::raw(format!("{:.2}%\n", percent_user * 100.0)),
@@ -532,7 +532,7 @@ impl<'a> App<'a> {
                 self.task_widget.draw_scrollbar(f, chunks[1]);
             }
             t => {
-                panic!("Unhandled tab {}", t);
+                panic!("Unhandled tab {t}");
             }
         }
     }
@@ -567,7 +567,7 @@ fn run_keyboard_input_test() -> Result<(), anyhow::Error> {
 
     for evt in stdin.events() {
         terminal.clear()?;
-        println!("{:?}", evt);
+        println!("{evt:?}");
         if let Ok(TEvent::Key(Key::Char('q'))) = evt {
             println!();
             break;
@@ -583,7 +583,7 @@ fn main() -> anyhow::Result<()> {
         return run_keyboard_input_test();
     }
 
-    let pid = args.get(1).and_then(|s| i32::from_str_radix(&s, 10).ok());
+    let pid = args.get(1).and_then(|s| s.parse::<i32>().ok());
 
     let prc = if let Some(pid) = pid {
         procfs::process::Process::new(pid).unwrap()
@@ -595,7 +595,7 @@ fn main() -> anyhow::Result<()> {
 
     let events = util::Events::new();
 
-    let stdout = termion::screen::AlternateScreen::from(std::io::stdout().into_raw_mode()?.into_alternate_screen()?);
+    let stdout = std::io::stdout().into_raw_mode()?.into_alternate_screen()?;
     let backend = TermionBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
     terminal.hide_cursor()?;
@@ -608,7 +608,7 @@ fn main() -> anyhow::Result<()> {
     loop {
         if need_redraw {
             // vertical layout has 5 sections:
-            terminal.draw(|mut f| {
+            terminal.draw(|f| {
                 let chunks = Layout::default()
                     .direction(Direction::Vertical)
                     .margin(0)
@@ -629,11 +629,11 @@ fn main() -> anyhow::Result<()> {
 
                 let mut help_text = Text::default();
 
-                app.draw_tab_selector(&mut f, chunks[2]);
-                app.draw_tab_body(&mut f, chunks[3], &mut help_text);
-                app.draw_cpu_spark(&mut f, chunks[4]);
+                app.draw_tab_selector(f, chunks[2]);
+                app.draw_tab_body(f, chunks[3], &mut help_text);
+                app.draw_cpu_spark(f, chunks[4]);
 
-                app.draw_top(&mut f, chunks[0], chunks[1], help_text);
+                app.draw_top(f, chunks[0], chunks[1], help_text);
             })?;
             need_redraw = false;
         }

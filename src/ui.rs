@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use std::{borrow::Cow, fs::read_to_string};
 
-use procfs::process::{FDInfo, FDTarget, Process, FDsIter};
+use procfs::process::{FDInfo, FDTarget, Process};
 use procfs::ProcessCgroup;
 use procfs::{
     net::{TcpNetEntry, UdpNetEntry, UnixNetEntry},
@@ -91,7 +91,7 @@ impl ScrollController {
         }
         let whole = p.floor();
         let rest = p - whole;
-        assert!(rest >= 0.0 && rest <= 1.0, "rest={} p={}", rest, p);
+        assert!((0.0..=1.0).contains(&rest), "rest={rest} p={p}");
         //let symbols = "·⸱⸳.";
         let symbols = "\u{2588}\u{2587}\u{2586}\u{2585}\u{2584}\u{2583}\u{2582}\u{2581} "; // "█▇▆▅▄▃▂▁";
         let mut text: Vec<Spans> = Vec::new();
@@ -106,7 +106,7 @@ impl ScrollController {
             let idx = (rest * (symbols.chars().count() - 1) as f32).round() as usize;
             //assert!(idx <= 3, "idx={} rest={} len={}", idx, rest, symbols.chars().count());
             let c = symbols.chars().nth(idx);
-            assert!(c.is_some(), "idx={}", idx);
+            assert!(c.is_some(), "idx={idx}");
             let c = c.unwrap();
             let fg = if c.is_whitespace() {
                 Color::Magenta
@@ -221,7 +221,7 @@ impl AppWidget for EnvWidget {
         match &self.env {
             Err(e) => {
                 text.push(From::from(Span::styled(
-                    format!("Error getting environment: {}", e),
+                    format!("Error getting environment: {e}"),
                     Style::default().fg(Color::Red).bg(Color::Reset),
                 )));
             }
@@ -288,51 +288,48 @@ impl AppWidget for NetWidget {
         match &self.fd {
             Ok(fd) => {
                 for fd in fd {
-                    match fd.target {
-                        procfs::process::FDTarget::Socket(inode) => {
-                            if let Some(entry) = self.tcp_map.get(&inode) {
-                                text.push(Spans::from(vec![
-                                    Span::styled("[tcp] ", Style::default().fg(Color::Green)),
-                                    Span::raw(format!(
-                                        " {} -> {} ({:?})",
-                                        entry.local_address, entry.remote_address, entry.state
-                                    )),
-                                ]));
-                            }
-                            if let Some(entry) = self.udp_map.get(&inode) {
-                                text.push(Spans::from(vec![
-                                    Span::styled("[udp] ", Style::default().fg(Color::Blue)),
-                                    Span::raw(format!(
-                                        " {} -> {} ({:?})",
-                                        entry.local_address, entry.remote_address, entry.state
-                                    )),
-                                ]));
-                            }
-                            if let Some(entry) = self.unix_map.get(&inode) {
-                                text.push(Spans::from(vec![
-                                    Span::styled("[unix]", Style::default().fg(Color::Yellow)),
-                                    Span::raw(match entry.socket_type as i32 {
-                                        libc::SOCK_STREAM => " STREAM    ",
-                                        libc::SOCK_DGRAM => " DGRAM     ",
-                                        libc::SOCK_SEQPACKET => " SEQPACKET ",
-                                        _ => "           ",
-                                    }),
-                                    if let Some(path) = &entry.path {
-                                        Span::raw(format!(" {}", path.display()))
-                                    } else {
-                                        Span::styled(" (no socket path)", Style::default().fg(Color::Gray))
-                                    },
-                                    Span::raw(format!(" ({:?})\n", entry.state)),
-                                ]));
-                            }
+                    if let procfs::process::FDTarget::Socket(inode) = fd.target {
+                        if let Some(entry) = self.tcp_map.get(&inode) {
+                            text.push(Spans::from(vec![
+                                Span::styled("[tcp] ", Style::default().fg(Color::Green)),
+                                Span::raw(format!(
+                                    " {} -> {} ({:?})",
+                                    entry.local_address, entry.remote_address, entry.state
+                                )),
+                            ]));
                         }
-                        _ => {}
+                        if let Some(entry) = self.udp_map.get(&inode) {
+                            text.push(Spans::from(vec![
+                                Span::styled("[udp] ", Style::default().fg(Color::Blue)),
+                                Span::raw(format!(
+                                    " {} -> {} ({:?})",
+                                    entry.local_address, entry.remote_address, entry.state
+                                )),
+                            ]));
+                        }
+                        if let Some(entry) = self.unix_map.get(&inode) {
+                            text.push(Spans::from(vec![
+                                Span::styled("[unix]", Style::default().fg(Color::Yellow)),
+                                Span::raw(match entry.socket_type as i32 {
+                                    libc::SOCK_STREAM => " STREAM    ",
+                                    libc::SOCK_DGRAM => " DGRAM     ",
+                                    libc::SOCK_SEQPACKET => " SEQPACKET ",
+                                    _ => "           ",
+                                }),
+                                if let Some(path) = &entry.path {
+                                    Span::raw(format!(" {}", path.display()))
+                                } else {
+                                    Span::styled(" (no socket path)", Style::default().fg(Color::Gray))
+                                },
+                                Span::raw(format!(" ({:?})\n", entry.state)),
+                            ]));
+                        }
                     }
                 }
             }
             Err(e) => {
                 text.push(Spans::from(Span::styled(
-                    format!("Error getting network connections: {}", e),
+                    format!("Error getting network connections: {e}"),
                     Style::default().fg(Color::Red).bg(Color::Reset),
                 )));
             }
@@ -416,16 +413,16 @@ impl AppWidget for MapsWidget {
                         | p @ MMapPath::Vvar
                         | p @ MMapPath::Vsyscall
                         | p @ MMapPath::Anonymous => {
-                            line.push(Span::styled(format!("{:?}\n", p), Style::default().fg(Color::Green)))
+                            line.push(Span::styled(format!("{p:?}\n"), Style::default().fg(Color::Green)))
                         }
-                        p => line.push(Span::raw(format!("{:?}", p))),
+                        p => line.push(Span::raw(format!("{p:?}"))),
                     }
                     text.push(Spans::from(line));
                 }
             }
             Err(ref e) => {
                 text.push(Spans::from(Span::styled(
-                    format!("Error getting maps: {}", e),
+                    format!("Error getting maps: {e}"),
                     Style::default().fg(Color::Red).bg(Color::Reset),
                 )));
             }
@@ -505,7 +502,7 @@ impl AppWidget for FilesWidget {
                             if unsafe { libc::stat(cstr.as_ptr(), &mut stat) } == 0 {
                                 if let Ok(locks) = &self.locks {
                                     if let Some(lock) = locks.iter().find(|lock| {
-                                        let lock_dev = unsafe { libc::makedev(lock.devmaj, lock.devmin) };
+                                        let lock_dev = libc::makedev(lock.devmaj, lock.devmin);
                                         lock.inode == stat.st_ino && stat.st_dev == lock_dev
                                     }) {
                                         line.push(Span::styled(
@@ -517,12 +514,9 @@ impl AppWidget for FilesWidget {
                             }
                         }
                         FDTarget::Pipe(inode) => {
-                            line.push(Span::styled(
-                                format!("pipe: {}", inode),
-                                Style::default().fg(Color::Blue),
-                            ));
+                            line.push(Span::styled(format!("pipe: {inode}"), Style::default().fg(Color::Blue)));
 
-                            if let Some((rd_side, wr_side)) = self.pipe_inodes.get(&inode) {
+                            if let Some((rd_side, wr_side)) = self.pipe_inodes.get(inode) {
                                 if fd.mode().contains(procfs::process::FDPermissions::READ) {
                                     line.push(Span::styled(
                                         format!(" (--> {} {})", wr_side.pid, wr_side.cmdline),
@@ -537,17 +531,17 @@ impl AppWidget for FilesWidget {
                             }
                         }
                         FDTarget::Socket(inode) => line.push(Span::styled(
-                            format!("socket: {}", inode),
+                            format!("socket: {inode}"),
                             Style::default().fg(Color::Yellow),
                         )),
-                        x => line.push(Span::raw(format!("{:?}", x))),
+                        x => line.push(Span::raw(format!("{x:?}"))),
                     }
                     text.push(Spans::from(line));
                 }
             }
             Err(ref e) => {
                 text.push(Spans::from(Span::styled(
-                    format!("Error getting fds: {}", e),
+                    format!("Error getting fds: {e}"),
                     Style::default().fg(Color::Red).bg(Color::Reset),
                 )));
             }
@@ -888,12 +882,10 @@ impl AppWidget for TreeWidget {
                             } else {
                                 "┆"
                             }
+                        } else if p_idx == depth - 1 {
+                            "┗"
                         } else {
-                            if p_idx == depth - 1 {
-                                "┗"
-                            } else {
-                                " "
-                            }
+                            " "
                         }
                     })
                     .collect::<Vec<_>>()
@@ -933,7 +925,7 @@ impl AppWidget for TreeWidget {
         let target_offset = area.height as i32 / 2; // 12
         let diff = select_idx - target_offset;
         let max_scroll = std::cmp::max(0, text.len() as i32 - area.height as i32);
-        let scroll = std::cmp::min(std::cmp::max(0, diff), max_scroll as i32);
+        let scroll = diff.clamp(0, max_scroll);
 
         //let max_scroll = get_numlines(text.iter(), area.width as usize) as i32 - area.height as i32;
         //self.set_max_scroll(max_scroll);
@@ -1100,7 +1092,7 @@ impl AppWidget for CGroupWidget {
                 };
                 if let Some(mountpoint) = self.v1_controllers.get(&groups) {
                     line.push(Span::styled(
-                        format!("{}: ", controller_name),
+                        format!("{controller_name}: "),
                         if current { green } else { selected },
                     ));
                     line.push(Span::raw(format!("{}\n", cg.pathname)));
@@ -1112,7 +1104,7 @@ impl AppWidget for CGroupWidget {
                     };
 
                     if current {
-                        details.push(Spans::from(Span::raw(format!("{:?}", groups))));
+                        details.push(Spans::from(Span::raw(format!("{groups:?}"))));
                         if groups.contains("pids") {
                             let current = read_to_string(root.join("pids.current"));
                             let max = read_to_string(root.join("pids.max"));
@@ -1150,7 +1142,7 @@ impl AppWidget for CGroupWidget {
                         }
                         if groups.contains("net_prio") {
                             if let Ok(idx) = read_to_string(root.join("net_prio.prioidx")) {
-                                details.push(Spans::from(Span::raw(format!("Prioidx: {}", idx))));
+                                details.push(Spans::from(Span::raw(format!("Prioidx: {idx}"))));
                             }
                             if let Ok(map) = read_to_string(root.join("net_prio.ifpriomap")) {
                                 details.push(Spans::from(vec![Span::raw("ifpriomap:"), Span::raw(map)]));
@@ -1166,20 +1158,20 @@ impl AppWidget for CGroupWidget {
                             }
                         }
                         {
-                            details.push(Spans::from(Span::raw(format!("--> {:?}", mountpoint))));
+                            details.push(Spans::from(Span::raw(format!("--> {mountpoint:?}"))));
                             details.push(Spans::from(Span::raw(format!("--> {:?}", cg.pathname))));
                         }
                     }
                 } else {
                     line.push(Span::styled(
-                        format!("{}: ", controller_name),
+                        format!("{controller_name}: "),
                         if current {
                             green.add_modifier(Modifier::DIM)
                         } else {
                             selected.add_modifier(Modifier::DIM)
                         },
                     ));
-                    line.push(Span::raw(format!("{}", cg.pathname)));
+                    line.push(Span::raw(cg.pathname.to_string()));
                     if idx == self.select_idx as usize {
                         details.push(Spans::from(Span::raw("This controller isn't supported by procdump")));
                     }
@@ -1191,7 +1183,7 @@ impl AppWidget for CGroupWidget {
         let target_offset = chunks[0].height as i32 / 2; // 12
         let diff = self.select_idx as i32 - target_offset;
         let max_scroll = std::cmp::max(0, text.len() as i32 - chunks[0].height as i32);
-        let scroll = std::cmp::min(std::cmp::max(0, diff), max_scroll as i32);
+        let scroll = diff.clamp(0, max_scroll);
 
         let widget = Paragraph::new(text)
             .block(Block::default().borders(Borders::NONE))
@@ -1392,7 +1384,7 @@ impl AppWidget for IOWidget {
         .enumerate()
         {
             let s = std::cmp::max(0, data.len() as i32 - chunks[1].width as i32) as usize;
-            let max = std::cmp::max(*max, *data[s..].into_iter().max().unwrap_or(&1) as u64);
+            let max = std::cmp::max(*max, *data[s..].iter().max().unwrap_or(&1));
             let widget = Sparkline::default()
                 .data(&data[s..])
                 .max(max)
@@ -1403,7 +1395,7 @@ impl AppWidget for IOWidget {
     fn update(&mut self, proc: &Process) {
         if self.last_updated.elapsed() > ONE_SECONDS {
             if let Ok(ref mut io_d) = self.io_d {
-                io_d.update(&proc);
+                io_d.update(proc);
 
                 let io = io_d.latest();
                 let prev_io = io_d.previous();
@@ -1459,7 +1451,7 @@ impl TaskWidget {
                     TaskData::new(t).map(|td| (tid, td))
                 })
             })
-            .map(|i| IndexMap::from_iter(i));
+            .map(IndexMap::from_iter);
 
         TaskWidget {
             last_updated: Instant::now(),
@@ -1492,7 +1484,7 @@ impl AppWidget for TaskWidget {
                     let diff = task.stat.utime - prev.stat.utime;
                     format!("{:.1}%", diff as f64 / 2.0)
                 } else {
-                    format!("??%")
+                    "??%".to_string()
                 };
 
                 text.push(Spans::from(Span::raw(format!(
@@ -1501,7 +1493,7 @@ impl AppWidget for TaskWidget {
                 ))));
             }
         } else {
-            text.push(Spans::from(Span::raw(format!("Error reading tasks"))));
+            text.push(Spans::from(Span::raw("Error reading tasks".to_string())));
         }
 
         let max_scroll = crate::get_numlines_from_spans(text.iter(), area.width as usize) as i32 - area.height as i32;
@@ -1522,7 +1514,7 @@ impl AppWidget for TaskWidget {
                         TaskData::new(t).map(|td| (tid, td))
                     })
                 })
-                .map(|i| IndexMap::from_iter(i));
+                .map(IndexMap::from_iter);
             std::mem::swap(&mut new_tasks, &mut self.tasks);
             // "new_tasks" now contains the "old_tasks"
             self.last_tasks = new_tasks.ok();

@@ -34,21 +34,20 @@ impl ProcessTree {
     ) {
         assert!(
             map.get(&pid).is_some(),
-            "ProcessTree doesn't have an entry for pid {}",
-            pid
+            "ProcessTree doesn't have an entry for pid {pid}"
         );
         let p = map.get(&pid).unwrap();
 
         v.push((depth, p));
 
         for cid in &p.children {
-            if let Some(child) = map.get(&cid) {
+            if let Some(child) = map.get(cid) {
                 Self::flatten_helper(map, v, child.pid, depth + 1);
             }
         }
     }
 
-    pub fn flatten<'a>(&'a self) -> Vec<(u8, &'a ProcessTreeEntry)> {
+    pub fn flatten(&self) -> Vec<(u8, &ProcessTreeEntry)> {
         let mut v = Vec::with_capacity(self.entries.len());
         Self::flatten_helper(&self.entries, &mut v, 1, 1);
 
@@ -66,12 +65,10 @@ impl ProcessTree {
         // map from pid to ProcessTreeEntry, which we'll return
         let mut map: HashMap<i32, ProcessTreeEntry> = HashMap::new();
 
-        for proc in all {
-            if let Ok(proc) = proc {
-                let proc_stat = proc.stat().unwrap();
-                child_map.entry(proc_stat.ppid).or_default().push(proc.pid);
-                procs.insert(proc.pid, proc);
-            }
+        for proc in all.flatten() {
+            let proc_stat = proc.stat().unwrap();
+            child_map.entry(proc_stat.ppid).or_default().push(proc.pid);
+            procs.insert(proc.pid, proc);
         }
 
         let root_proc = procs.get(&1).unwrap();
@@ -81,7 +78,7 @@ impl ProcessTree {
             cmdline: root_proc
                 .cmdline()
                 .ok()
-                .map_or(root_proc.stat()?.comm.clone(), |cmdline| cmdline.join(" ")),
+                .map_or(root_proc.stat()?.comm, |cmdline| cmdline.join(" ")),
             children: Vec::new(),
             num_siblings: 0,
         };
@@ -121,7 +118,7 @@ fn build_entry(
 ) {
     if let Some(child_pids) = child_map.get(&entry.pid) {
         for child_pid in child_pids {
-            let p = proc_map.get(&child_pid).unwrap();
+            let p = proc_map.get(child_pid).unwrap();
             let mut child_entry = ProcessTreeEntry {
                 pid: *child_pid,
                 ppid: entry.pid,
@@ -143,7 +140,7 @@ fn build_entry(
 pub(crate) fn limit_to_string(limit: &LimitValue) -> Cow<'static, str> {
     match limit {
         LimitValue::Unlimited => Cow::Borrowed("Unlimited"),
-        LimitValue::Value(v) => Cow::Owned(format!("{}", v)),
+        LimitValue::Value(v) => Cow::Owned(format!("{v}")),
     }
 }
 
@@ -153,7 +150,7 @@ where
 {
     let mut num_lines = 1;
     for span in spans {
-        num_lines += 1 + (span.width() / width as usize);
+        num_lines += 1 + (span.width() / width);
     }
 
     num_lines
@@ -170,13 +167,13 @@ where
         // we assume that if there is a newline, it will only be at the *end*
         if item.content.ends_with('\n') {
             cur_line_length += item.content.len() - 1;
-            num_lines += 1 + (cur_line_length / width as usize);
+            num_lines += 1 + (cur_line_length / width);
             cur_line_length = 0;
         } else {
             cur_line_length += item.content.len();
         }
     }
-    num_lines += cur_line_length / width as usize;
+    num_lines += cur_line_length / width;
 
     num_lines
 }
@@ -210,7 +207,7 @@ pub(crate) fn fmt_bytes(b: u64, suffix: &'static str) -> String {
     } else if b > 1000 {
         format!("{:.2} K{}", b as f64 / 1000.0, suffix)
     } else {
-        format!("{} {}", b, suffix)
+        format!("{b} {suffix}")
     }
 }
 
@@ -220,7 +217,7 @@ pub(crate) fn fmt_rate(b: f32, suffix: &'static str) -> String {
     } else if b > 1000.0 {
         format!("{:.1} K{}", b / 1000.0, suffix)
     } else {
-        format!("{:.1} {}", b, suffix)
+        format!("{b:.1} {suffix}")
     }
 }
 
@@ -298,11 +295,9 @@ pub(crate) fn lookup_username(uid: u32) -> String {
 
     let mut ptr = std::ptr::null_mut::<passwd>();
 
-    if unsafe { getpwuid_r(uid, &mut pwd, buf.as_mut_ptr(), buf_size, &mut ptr) } == 0 {
-        if !ptr.is_null() {
-            let name = unsafe { CStr::from_ptr(pwd.pw_name) };
-            return name.to_string_lossy().into_owned();
-        }
+    if unsafe { getpwuid_r(uid, &mut pwd, buf.as_mut_ptr(), buf_size, &mut ptr) } == 0 && !ptr.is_null() {
+        let name = unsafe { CStr::from_ptr(pwd.pw_name) };
+        return name.to_string_lossy().into_owned();
     }
 
     "???".to_owned()
@@ -326,11 +321,9 @@ pub(crate) fn lookup_groupname(gid: u32) -> String {
 
     let mut ptr = std::ptr::null_mut::<group>();
 
-    if unsafe { getgrgid_r(gid, &mut pwd, buf.as_mut_ptr(), buf_size, &mut ptr) } == 0 {
-        if !ptr.is_null() {
-            let name = unsafe { CStr::from_ptr(pwd.gr_name) };
-            return name.to_string_lossy().into_owned();
-        }
+    if unsafe { getgrgid_r(gid, &mut pwd, buf.as_mut_ptr(), buf_size, &mut ptr) } == 0 && !ptr.is_null() {
+        let name = unsafe { CStr::from_ptr(pwd.gr_name) };
+        return name.to_string_lossy().into_owned();
     }
 
     "???".to_owned()
@@ -444,7 +437,7 @@ mod tests {
     #[test]
     fn test_proc_all_tree() {
         let tree = super::ProcessTree::new(None).unwrap();
-        println!("{:#?}", tree);
+        println!("{tree:#?}");
         //let me = procfs::process::Process::myself().unwrap();
         //let all = super::proc_all_tree(Some(&me)).unwrap();
         //println!("{:#?}", all);
