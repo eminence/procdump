@@ -66,7 +66,7 @@ impl ProcessTree {
         let mut map: HashMap<i32, ProcessTreeEntry> = HashMap::new();
 
         for proc in all.flatten() {
-            let proc_stat = proc.stat().unwrap();
+            let Ok(proc_stat) = proc.stat() else { continue };
             child_map.entry(proc_stat.ppid).or_default().push(proc.pid);
             procs.insert(proc.pid, proc);
         }
@@ -119,13 +119,16 @@ fn build_entry(
     if let Some(child_pids) = child_map.get(&entry.pid) {
         for child_pid in child_pids {
             let p = proc_map.get(child_pid).unwrap();
+            let Ok(stat) = p.stat() else {
+                continue;
+            };
             let mut child_entry = ProcessTreeEntry {
                 pid: *child_pid,
                 ppid: entry.pid,
                 cmdline: p
                     .cmdline()
                     .ok()
-                    .map_or(p.stat().unwrap().comm.clone(), |cmdline| cmdline.join(" ")),
+                    .map_or( stat.comm.clone(), |cmdline| cmdline.join(" ")),
                 children: Vec::new(),
                 num_siblings: child_pids.len() as u32,
             };
