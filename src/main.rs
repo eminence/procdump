@@ -270,6 +270,7 @@ impl<'a> App<'a> {
             self.io_widget = ui::widgets::IOWidget::new(&proc);
             self.stat_d = StatDelta::<procfs::process::Stat>::new(&proc);
             self.cpu_spark = SparklineData::new();
+            self.proc_stat = proc.stat().unwrap();
             self.proc = proc;
         }
     }
