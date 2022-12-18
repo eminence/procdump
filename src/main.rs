@@ -288,7 +288,7 @@ impl<'a> App<'a> {
             ui::widgets::TreeWidget::TITLE => {
                 if input == Key::Char('\n') {
                     let new_pid = self.tree_widget.get_selected_pid();
-                    if new_pid != self.proc.stat().unwrap().pid {
+                    if new_pid != self.proc_stat.pid {
                         self.switch_to(new_pid);
                         return ui::InputResult::NeedsUpdate;
                     }
@@ -346,7 +346,7 @@ impl<'a> App<'a> {
                 text.push(Span::raw(" "));
             }
         } else {
-            text.push(Span::raw(format!("\u{2500} {} ", self.proc.stat().unwrap().comm)));
+            text.push(Span::raw(format!("\u{2500} {} ", self.proc_stat.comm)));
         }
 
         text.push(Span::raw("\u{2500}".repeat(top_area.width as usize)));
