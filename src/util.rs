@@ -201,23 +201,23 @@ pub(crate) fn fmt_time(dt: chrono::DateTime<chrono::offset::Local>) -> impl Disp
 
 pub(crate) fn fmt_bytes(b: u64, suffix: &'static str) -> String {
     if b > 1000 * 1000 * 1000 {
-        format!("{:.2} G{}", b as f64 / 1000.0 / 1000.0 / 1000.0, suffix)
+        format!("{:.2}\u{00A0}G{}", b as f64 / 1000.0 / 1000.0 / 1000.0, suffix)
     } else if b > 1000 * 1000 {
-        format!("{:.2} M{}", b as f64 / 1000.0 / 1000.0, suffix)
+        format!("{:.2}\u{00A0}M{}", b as f64 / 1000.0 / 1000.0, suffix)
     } else if b > 1000 {
-        format!("{:.2} K{}", b as f64 / 1000.0, suffix)
+        format!("{:.2}\u{00A0}K{}", b as f64 / 1000.0, suffix)
     } else {
-        format!("{b} {suffix}")
+        format!("{b}\u{00A0}{suffix}")
     }
 }
 
 pub(crate) fn fmt_rate(b: f32, suffix: &'static str) -> String {
     if b > 1000.0 * 1000.0 {
-        format!("{:.1} M{}", b / 1000.0 / 1000.0, suffix)
+        format!("{:.1}\u{00A0}M{}", b / 1000.0 / 1000.0, suffix)
     } else if b > 1000.0 {
-        format!("{:.1} K{}", b / 1000.0, suffix)
+        format!("{:.1}\u{00A0}K{}", b / 1000.0, suffix)
     } else {
-        format!("{b:.1} {suffix}")
+        format!("{b:.1}\u{00A0}{suffix}")
     }
 }
 

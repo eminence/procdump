@@ -369,11 +369,14 @@ impl<'a> App<'a> {
 
         // first block is basic state info
         let s = Style::default().fg(Color::Green);
-        let mut text: Vec<Spans> = Vec::new();
+
+        // Note: everything gets put into the same Spans so it can be wrapped
+
+        let mut text: Vec<Span> = Vec::new();
 
         // first line:
         // pid:19610 ppid:8959 pgrp:19610 session:8959
-        text.push(Spans::from(vec![
+        text.extend(vec![
             Span::styled("pid:", s),
             Span::raw(format!("{} ", self.proc_stat.pid)),
             Span::styled("ppid:", s),
@@ -381,52 +384,54 @@ impl<'a> App<'a> {
             Span::styled("pgrp:", s),
             Span::raw(format!("{} ", self.proc_stat.pgrp)),
             Span::styled("session:", s),
-            Span::raw(format!("{}", self.proc_stat.session)),
-        ]));
+            Span::raw(format!("{} ", self.proc_stat.session)),
+        ]);
 
         // second line:
         // state:X (Dead) started:23:14:28
-        text.push(Spans::from(vec![
+        text.extend(vec![
             Span::styled("state:", s),
             if self.proc.is_alive() {
                 Span::raw(format!(
-                    "{} ({:?}) ",
+                    "{}\u{00A0}({:?}) ",
                     self.proc_stat.state,
                     self.proc_stat.state().unwrap()
                 ))
             } else {
-                Span::raw("X (Dead) ".to_string())
+                Span::raw("X\u{00A0}(Dead) ".to_string())
             },
             Span::styled("started:", s),
             if let Ok(dt) = self.proc_stat.starttime() {
-                Span::raw(format!("{}\n", fmt_time(dt)))
+                Span::raw(format!("{} ", fmt_time(dt)))
             } else {
-                Span::styled("(unknown)\n", Style::default().fg(Color::Red).bg(Color::Reset))
+                Span::styled("(unknown) ", Style::default().fg(Color::Red).bg(Color::Reset))
             },
-        ]));
+        ]);
 
         // third line:
         // owner:achin(1000) threads:
 
         let status = self.proc.status();
         if let Ok(ref status) = status {
-            text.push(Spans::from(vec![
+            text.extend(vec![
                 Span::styled("owner:", s),
                 Span::raw(format!("{}({}) ", lookup_username(status.ruid), status.ruid)),
                 Span::styled("threads:", s),
-                Span::raw(format!("{}\n", status.threads)),
-            ]));
+                Span::raw(format!("{} ", status.threads)),
+            ]);
         }
 
         // forth line:
         // nice:0
 
-        text.push(Spans::from(vec![
+        text.extend(vec![
             Span::styled("nice:", s),
             Span::raw(format!("{} ", self.proc_stat.nice)),
-        ]));
+        ]);
 
-        let widget = Paragraph::new(text).block(Block::default().borders(Borders::RIGHT));
+        let widget = Paragraph::new(Spans::from(text))
+            .block(Block::default().borders(Borders::RIGHT))
+            .wrap(Wrap { trim: true });
         f.render_widget(widget, chunks[0]);
 
         // second block is CPU time info
@@ -450,9 +455,9 @@ impl<'a> App<'a> {
         let percent_user = stat.utime as f32 / (stat.utime + stat.stime) as f32;
 
         text.push(Spans::from(vec![
-            Span::styled("user time:", s),
+            Span::styled("user\u{00A0}time:", s),
             Span::raw(format!("{u_time:?} ")),
-            Span::styled("kernel time:", s),
+            Span::styled("kernel\u{00A0}time:", s),
             Span::raw(format!("{s_time:?} ")),
             // how much time is in userland
             Span::styled("u/k:", s),
@@ -481,7 +486,9 @@ impl<'a> App<'a> {
         }
         text.push(Spans::from(line));
 
-        let widget = Paragraph::new(text).block(Block::default().borders(Borders::RIGHT));
+        let widget = Paragraph::new(text)
+            .block(Block::default().borders(Borders::RIGHT))
+            .wrap(Wrap { trim: true });
         f.render_widget(widget, chunks[1]);
 
         // third block is help info
