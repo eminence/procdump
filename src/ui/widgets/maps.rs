@@ -31,6 +31,7 @@ pub struct MapsWidget {
     want_smaps: bool,
     last_updated: Instant,
     scroll: ScrollController,
+    force_update: bool,
 }
 
 impl MapsWidget {
@@ -40,6 +41,7 @@ impl MapsWidget {
             want_smaps: false,
             last_updated: Instant::now(),
             scroll: ScrollController::new(),
+            force_update: false,
         }
     }
     pub fn draw_scrollbar<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
@@ -55,9 +57,21 @@ impl AppWidget for MapsWidget {
         let spans = Spans::from(vec![
             Span::raw("The "),
             Span::styled("Maps", Style::default().fg(Color::Yellow)),
-            Span::raw(" tab shows the currently mapped memory regions."),
+            Span::raw(" tab shows the currently mapped memory regions. Press "),
+            Span::styled("d", Style::default().fg(Color::Green)),
+            Span::raw(" to toggle extra details about each map."),
         ]);
         help_text.extend(Text::from(spans));
+        if self.want_smaps {
+            let spans = Spans::from(vec![
+                Span::raw(" The "),
+                Span::styled("Size", Style::default().fg(Color::Magenta)),
+                Span::raw(" column shows the total size of the mapped page, and the "),
+                Span::styled("Rss", Style::default().fg(Color::Magenta)),
+                Span::raw(" column shows how much of that size is mapped into physical memory."),
+            ]);
+            help_text.extend(Text::from(spans));
+        }
 
         match &self.maps {
             Maps::Maps(Ok(maps)) => {
@@ -150,18 +164,20 @@ impl AppWidget for MapsWidget {
         f.render_widget(widget, area);
     }
     fn update(&mut self, proc: &Process) {
-        if self.last_updated.elapsed() > TWO_SECONDS {
+        if self.last_updated.elapsed() > TWO_SECONDS || self.force_update {
             if self.want_smaps {
                 self.maps = Maps::SMaps(proc.smaps());
             } else {
                 self.maps = Maps::Maps(proc.maps());
             }
             self.last_updated = Instant::now();
+            self.force_update = false;
         }
     }
     fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
         if let Key::Char('d') = input {
             self.want_smaps = !self.want_smaps;
+            self.force_update = true;
             return InputResult::NeedsUpdate;
         }
         self.scroll.handle_input(input, height)
