@@ -1,6 +1,7 @@
 use std::{collections::HashMap, ffi::CString, os::unix::prelude::OsStrExt, time::Instant};
 
 use procfs::{
+    net::{TcpNetEntry, UdpNetEntry, UnixNetEntry},
     process::{FDTarget, Process},
     ProcResult,
 };
@@ -25,6 +26,9 @@ pub struct FilesWidget {
     fds: ProcResult<Vec<procfs::process::FDInfo>>,
     locks: ProcResult<Vec<procfs::Lock>>,
     pipe_inodes: HashMap<u64, (util::ProcessTreeEntry, util::ProcessTreeEntry)>,
+    tcp_map: HashMap<u64, TcpNetEntry>,
+    udp_map: HashMap<u64, UdpNetEntry>,
+    unix_map: HashMap<u64, UnixNetEntry>,
     last_updated: Instant,
     pipes_updated: Instant,
     scroll: ScrollController,
@@ -35,6 +39,9 @@ impl FilesWidget {
         FilesWidget {
             fds: proc.fd().map(|iter| iter.filter_map(|f| f.ok()).collect()),
             locks: util::get_locks_for_pid(proc.pid),
+            tcp_map: crate::util::get_tcp_table(proc),
+            udp_map: crate::util::get_udp_table(proc),
+            unix_map: crate::util::get_unix_table(proc),
             last_updated: Instant::now(),
             pipe_inodes: util::get_pipe_pairs(),
             pipes_updated: Instant::now(),
@@ -105,10 +112,43 @@ impl AppWidget for FilesWidget {
                                 }
                             }
                         }
-                        FDTarget::Socket(inode) => line.push(Span::styled(
-                            format!("socket: {inode}"),
-                            Style::default().fg(Color::Yellow),
-                        )),
+                        FDTarget::Socket(inode) => {
+                            line.push(Span::styled(
+                                format!("socket: {inode} "),
+                                Style::default().fg(Color::Yellow),
+                            ));
+                            // do we have an entry for this socket inode in any of our tables?
+                            if let Some(entry) = self.tcp_map.get(inode) {
+                                line.push(Span::raw(format!(
+                                    "[tcp] {} -> {} ({:?})",
+                                    entry.local_address, entry.remote_address, entry.state
+                                )));
+                            } else if let Some(entry) = self.udp_map.get(inode) {
+                                line.push(Span::raw(format!(
+                                    "[udp] {} -> {} ({:?})",
+                                    entry.local_address, entry.remote_address, entry.state
+                                )));
+                            } else if let Some(entry) = self.unix_map.get(inode) {
+                                line.push(Span::styled("[unix]", Style::default().fg(Color::Yellow)));
+                                line.push(Span::raw(match entry.socket_type as i32 {
+                                    libc::SOCK_STREAM => " STREAM    ",
+                                    libc::SOCK_DGRAM => " DGRAM     ",
+                                    libc::SOCK_SEQPACKET => " SEQPACKET ",
+                                    _ => "           ",
+                                }));
+                                if let Some(path) = &entry.path {
+                                    line.push(Span::raw(format!(" {}", path.display())));
+                                } else {
+                                    line.push(Span::styled(" (no socket path)", Style::default().fg(Color::Gray)));
+                                }
+                                line.push(Span::raw(format!(" ({:?})\n", entry.state)));
+                            } else {
+                                line.push(Span::styled(
+                                    format!("socket: {inode}"),
+                                    Style::default().fg(Color::Yellow),
+                                ))
+                            }
+                        }
                         x => line.push(Span::raw(format!("{x:?}"))),
                     }
                     text.push(Spans::from(line));
@@ -135,6 +175,9 @@ impl AppWidget for FilesWidget {
             self.fds = proc.fd().map(|iter| iter.filter_map(|f| f.ok()).collect());
             self.locks = util::get_locks_for_pid(proc.pid);
             self.last_updated = Instant::now();
+            self.tcp_map = crate::util::get_tcp_table(proc);
+            self.udp_map = crate::util::get_udp_table(proc);
+            self.unix_map = crate::util::get_unix_table(proc);
         }
         if self.pipes_updated.elapsed() > TEN_SECONDS {
             self.pipe_inodes = util::get_pipe_pairs();
