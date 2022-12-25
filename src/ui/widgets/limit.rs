@@ -247,6 +247,6 @@ impl AppWidget for LimitWidget {
         }
     }
     fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
-        From::from(self.scroll.handle_input(input, height))
+        self.scroll.handle_input(input, height)
     }
 }

@@ -38,7 +38,7 @@ impl EnvWidget {
 impl AppWidget for EnvWidget {
     const TITLE: &'static str = "Env";
     fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
-        From::from(self.scroll.handle_input(input, height))
+        self.scroll.handle_input(input, height)
     }
 
     fn update(&mut self, proc: &Process) {

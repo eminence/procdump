@@ -164,6 +164,6 @@ impl AppWidget for MapsWidget {
             self.want_smaps = !self.want_smaps;
             return InputResult::NeedsUpdate;
         }
-        From::from(self.scroll.handle_input(input, height))
+        self.scroll.handle_input(input, height)
     }
 }
