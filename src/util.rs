@@ -376,15 +376,15 @@ pub(crate) fn get_pipe_pairs() -> HashMap<u64, (ProcessTreeEntry, ProcessTreeEnt
     map
 }
 
-pub(crate) fn get_tcp_table() -> HashMap<u64, procfs::net::TcpNetEntry> {
+pub(crate) fn get_tcp_table(p: &procfs::process::Process) -> HashMap<u64, procfs::net::TcpNetEntry> {
     let mut map = HashMap::new();
 
-    if let Ok(tcp) = procfs::net::tcp() {
+    if let Ok(tcp) = p.tcp() {
         for entry in tcp {
             map.insert(entry.inode, entry);
         }
     }
-    if let Ok(tcp) = procfs::net::tcp6() {
+    if let Ok(tcp) = p.tcp6() {
         for entry in tcp {
             map.insert(entry.inode, entry);
         }
@@ -393,15 +393,15 @@ pub(crate) fn get_tcp_table() -> HashMap<u64, procfs::net::TcpNetEntry> {
     map
 }
 
-pub(crate) fn get_udp_table() -> HashMap<u64, procfs::net::UdpNetEntry> {
+pub(crate) fn get_udp_table(p: &procfs::process::Process) -> HashMap<u64, procfs::net::UdpNetEntry> {
     let mut map = HashMap::new();
 
-    if let Ok(udp) = procfs::net::udp() {
+    if let Ok(udp) = p.udp() {
         for entry in udp {
             map.insert(entry.inode, entry);
         }
     }
-    if let Ok(udp) = procfs::net::udp6() {
+    if let Ok(udp) = p.udp6() {
         for entry in udp {
             map.insert(entry.inode, entry);
         }
@@ -410,10 +410,10 @@ pub(crate) fn get_udp_table() -> HashMap<u64, procfs::net::UdpNetEntry> {
     map
 }
 
-pub(crate) fn get_unix_table() -> HashMap<u64, procfs::net::UnixNetEntry> {
+pub(crate) fn get_unix_table(p: &procfs::process::Process) -> HashMap<u64, procfs::net::UnixNetEntry> {
     let mut map = HashMap::new();
 
-    if let Ok(unix) = procfs::net::unix() {
+    if let Ok(unix) = p.unix() {
         for entry in unix {
             map.insert(entry.inode, entry);
         }

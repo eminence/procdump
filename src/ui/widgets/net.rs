@@ -31,9 +31,9 @@ pub struct NetWidget {
 impl NetWidget {
     pub fn new(proc: &Process) -> NetWidget {
         NetWidget {
-            tcp_map: crate::util::get_tcp_table(),
-            udp_map: crate::util::get_udp_table(),
-            unix_map: crate::util::get_unix_table(),
+            tcp_map: crate::util::get_tcp_table(proc),
+            udp_map: crate::util::get_udp_table(proc),
+            unix_map: crate::util::get_unix_table(proc),
             fd: proc.fd().map(|iter| iter.filter_map(|f| f.ok()).collect()),
             last_updated: Instant::now(),
             scroll: ScrollController::new(),
@@ -123,9 +123,9 @@ impl AppWidget for NetWidget {
     fn update(&mut self, proc: &Process) {
         if self.last_updated.elapsed() > TWO_SECONDS {
             self.fd = proc.fd().map(|iter| iter.filter_map(|f| f.ok()).collect());
-            self.tcp_map = crate::util::get_tcp_table();
-            self.udp_map = crate::util::get_udp_table();
-            self.unix_map = crate::util::get_unix_table();
+            self.tcp_map = crate::util::get_tcp_table(proc);
+            self.udp_map = crate::util::get_udp_table(proc);
+            self.unix_map = crate::util::get_unix_table(proc);
             self.last_updated = Instant::now();
         }
     }
