@@ -220,6 +220,10 @@ impl AppWidget for TreeWidget {
                 self.selected_pid = item.pid;
             }
         }
-        From::from(r)
+        if r {
+            InputResult::NeedsRedraw
+        } else {
+            InputResult::None
+        }
     }
 }

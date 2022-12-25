@@ -215,25 +215,25 @@ impl AppWidget for CGroupWidget {
         }
     }
     fn handle_input(&mut self, input: Key, _height: u16) -> InputResult {
-        From::from(match input {
+        match input {
             Key::Up => {
                 if self.select_idx > 0 {
                     self.select_idx -= 1;
-                    true
+                    InputResult::NeedsRedraw
                 } else {
-                    false
+                    InputResult::None
                 }
             }
             Key::Down => {
                 let max = self.proc_groups.as_ref().map_or_else(|_| 0, |v| v.len() - 1);
                 if (self.select_idx as usize) < max {
                     self.select_idx += 1;
-                    true
+                    InputResult::NeedsRedraw
                 } else {
-                    false
+                    InputResult::None
                 }
             }
-            _ => false,
-        })
+            _ => InputResult::None,
+        }
     }
 }

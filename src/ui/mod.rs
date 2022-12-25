@@ -25,16 +25,6 @@ pub enum InputResult {
     None,
 }
 
-impl From<bool> for InputResult {
-    fn from(b: bool) -> InputResult {
-        if b {
-            InputResult::NeedsRedraw
-        } else {
-            InputResult::None
-        }
-    }
-}
-
 impl std::ops::BitOr for InputResult {
     type Output = InputResult;
     fn bitor(self, rhs: Self) -> Self {
@@ -108,7 +98,7 @@ impl ScrollController {
         }
         self.max_scroll = max;
     }
-    fn handle_input(&mut self, input: Key, height: u16) -> bool {
+    fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
         let pageupdown_size = height / 3;
         match input {
             Key::Down | Key::PageDown | Key::End => {
@@ -124,15 +114,19 @@ impl ScrollController {
                 );
                 if to_move > 0 {
                     self.scroll_offset += to_move as u16;
-                    true
+                    InputResult::NeedsRedraw
                 } else {
-                    false
+                    InputResult::None
                 }
             }
             Key::Home => {
                 let p = self.scroll_offset;
                 self.scroll_offset = 0;
-                p > 0
+                if p > 0 {
+                    InputResult::NeedsRedraw
+                } else {
+                    InputResult::None
+                }
             }
             Key::Up | Key::PageUp => {
                 let mut to_move = if input == Key::PageUp { pageupdown_size } else { 1 } as i32;
@@ -141,12 +135,12 @@ impl ScrollController {
                 }
                 if to_move > 0 {
                     self.scroll_offset -= to_move as u16;
-                    true
+                    InputResult::NeedsRedraw
                 } else {
-                    false
+                    InputResult::None
                 }
             }
-            _ => false,
+            _ => InputResult::None,
         }
     }
 }
