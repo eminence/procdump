@@ -1,11 +1,11 @@
 use std::{collections::HashMap, time::Instant};
 
+use crossterm::event::KeyEvent;
 use procfs::{
     net::{TcpNetEntry, UdpNetEntry, UnixNetEntry},
     process::{FDInfo, Process},
     ProcError,
 };
-use termion::event::Key;
 use tui::{
     backend::Backend,
     layout::Rect,
@@ -129,7 +129,7 @@ impl AppWidget for NetWidget {
             self.last_updated = Instant::now();
         }
     }
-    fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
+    fn handle_input(&mut self, input: KeyEvent, height: u16) -> InputResult {
         self.scroll.handle_input(input, height)
     }
 }

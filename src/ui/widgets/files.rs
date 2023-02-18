@@ -1,11 +1,11 @@
 use std::{collections::HashMap, ffi::CString, os::unix::prelude::OsStrExt, time::Instant};
 
+use crossterm::event::KeyEvent;
 use procfs::{
     net::{TcpNetEntry, UdpNetEntry, UnixNetEntry},
     process::{FDTarget, Process},
     ProcResult,
 };
-use termion::event::Key;
 use tui::{
     backend::Backend,
     layout::Rect,
@@ -184,7 +184,7 @@ impl AppWidget for FilesWidget {
             self.pipes_updated = Instant::now();
         }
     }
-    fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
+    fn handle_input(&mut self, input: KeyEvent, height: u16) -> InputResult {
         self.scroll.handle_input(input, height)
     }
 }

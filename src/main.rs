@@ -1,15 +1,15 @@
 use std::time::{Duration, Instant};
 
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::execute;
+use crossterm::terminal::{ClearType, EnterAlternateScreen, LeaveAlternateScreen};
 use procfs::process::{self, Process};
-use termion::event::Key;
-use termion::raw::IntoRawMode;
-use termion::screen::IntoAlternateScreen;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::*;
 use tui::terminal::{Frame, Terminal};
 use tui::widgets::*;
 use tui::{
-    backend::{Backend, TermionBackend},
+    backend::{Backend, CrosstermBackend},
     text::{Span, Spans, Text},
 };
 
@@ -275,7 +275,7 @@ impl<'a> App<'a> {
         }
     }
 
-    fn handle_input(&mut self, input: Key, height: u16) -> ui::InputResult {
+    fn handle_input(&mut self, input: KeyEvent, height: u16) -> ui::InputResult {
         let widget_redraw = match self.tab.current_label() {
             ui::widgets::EnvWidget::TITLE => self.env_widget.handle_input(input, height),
             ui::widgets::NetWidget::TITLE => self.net_widget.handle_input(input, height),
@@ -287,7 +287,7 @@ impl<'a> App<'a> {
             ui::widgets::IOWidget::TITLE => self.io_widget.handle_input(input, height),
             ui::widgets::TaskWidget::TITLE => self.task_widget.handle_input(input, height),
             ui::widgets::TreeWidget::TITLE => {
-                if input == Key::Char('\n') {
+                if input.code == KeyCode::Enter {
                     let new_pid = self.tree_widget.get_selected_pid();
                     if new_pid != self.proc_stat.pid {
                         self.switch_to(new_pid);
@@ -298,16 +298,16 @@ impl<'a> App<'a> {
             }
             _ => ui::InputResult::None,
         };
-        let input_redraw = match input {
-            Key::Char('\t') | Key::Right => {
+        let input_redraw = match input.code {
+            KeyCode::Tab | KeyCode::Right => {
                 self.tab.select_next();
                 ui::InputResult::NeedsRedraw
             }
-            Key::BackTab | Key::Left => {
+            KeyCode::BackTab | KeyCode::Left => {
                 self.tab.select_prev();
                 ui::InputResult::NeedsRedraw
             }
-            Key::Char(c) => self.tab.select_by_char(c),
+            KeyCode::Char(c) => self.tab.select_by_char(c),
             _ => ui::InputResult::None,
         };
         widget_redraw | input_redraw
@@ -573,25 +573,28 @@ impl<'a> App<'a> {
 
 /// Dedicated input testing mode, to debug terminals that don't report key presses in an expected way
 fn run_keyboard_input_test() -> Result<(), anyhow::Error> {
-    use termion::event::Event as TEvent;
-    use termion::input::TermRead;
+    use crossterm::event::{read, Event, KeyEvent};
 
-    let stdout = std::io::stdout().into_raw_mode()?;
-    let backend = TermionBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-    terminal.hide_cursor()?;
-    terminal.clear()?;
+    crossterm::terminal::enable_raw_mode()?;
 
-    let stdin = std::io::stdin();
+    let mut stdout = std::io::stdout();
+    execute!(stdout, crossterm::terminal::Clear(ClearType::All))?;
 
-    for evt in stdin.events() {
-        terminal.clear()?;
+    loop {
+        let evt = read()?;
+        execute!(stdout, crossterm::terminal::Clear(ClearType::All))?;
+
         println!("{evt:?}");
-        if let Ok(TEvent::Key(Key::Char('q'))) = evt {
+        if let Event::Key(KeyEvent {
+            code: KeyCode::Char('q'),
+            ..
+        }) = evt
+        {
             println!();
             break;
         }
     }
+    crossterm::terminal::disable_raw_mode()?;
     Ok(())
 }
 
@@ -614,71 +617,89 @@ fn main() -> anyhow::Result<()> {
 
     let events = util::Events::new();
 
-    let stdout = std::io::stdout().into_raw_mode()?.into_alternate_screen()?;
-    let backend = TermionBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-    terminal.hide_cursor()?;
-    terminal.clear()?;
+    let mut stdout = std::io::stdout();
 
-    let mut app = App::new(prc);
+    crossterm::execute!(stdout, EnterAlternateScreen)?;
+    crossterm::terminal::enable_raw_mode()?;
 
-    let mut need_redraw = true;
-    let mut tab_body_height = 0;
-    loop {
-        if need_redraw {
-            // vertical layout has 5 sections:
-            terminal.draw(|f| {
-                let chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .margin(0)
-                    .constraints(
-                        [
-                            Constraint::Length(1),     // very top line
-                            Constraint::Length(4 + 2), // top fixed-sized info box
-                            Constraint::Length(1 + 2), // tab selector
-                            Constraint::Min(0),        // tab body
-                            Constraint::Length(5),     // cpu sparkline
-                                                       // Constraint::Length(5),     // cpu sparkline
-                        ]
-                        .as_ref(),
-                    )
-                    .split(f.size());
+    {
+        let backend = CrosstermBackend::new(&mut stdout);
+        let mut terminal = Terminal::new(backend)?;
+        terminal.hide_cursor()?;
+        terminal.clear()?;
 
-                tab_body_height = chunks[3].height;
+        let mut app = App::new(prc);
 
-                let mut help_text = Text::default();
+        let mut need_redraw = true;
+        let mut tab_body_height = 0;
+        loop {
+            if need_redraw {
+                // vertical layout has 5 sections:
+                terminal.draw(|f| {
+                    let chunks = Layout::default()
+                        .direction(Direction::Vertical)
+                        .margin(0)
+                        .constraints(
+                            [
+                                Constraint::Length(1),     // very top line
+                                Constraint::Length(4 + 2), // top fixed-sized info box
+                                Constraint::Length(1 + 2), // tab selector
+                                Constraint::Min(0),        // tab body
+                                Constraint::Length(5),     // cpu sparkline
+                                                           // Constraint::Length(5),     // cpu sparkline
+                            ]
+                            .as_ref(),
+                        )
+                        .split(f.size());
 
-                app.draw_tab_selector(f, chunks[2]);
-                app.draw_tab_body(f, chunks[3], &mut help_text);
-                app.draw_cpu_spark(f, chunks[4]);
+                    tab_body_height = chunks[3].height;
 
-                app.draw_top(f, chunks[0], chunks[1], help_text);
-            })?;
-            need_redraw = false;
-        }
+                    let mut help_text = Text::default();
 
-        match events.rx.recv() {
-            Err(..) => break,
-            Ok(Event::Key(Key::Esc)) | Ok(Event::Key(Key::Char('q'))) | Ok(Event::Key(Key::Ctrl('c'))) => break,
+                    app.draw_tab_selector(f, chunks[2]);
+                    app.draw_tab_body(f, chunks[3], &mut help_text);
+                    app.draw_cpu_spark(f, chunks[4]);
 
-            Ok(Event::Key(k)) => match app.handle_input(k, tab_body_height) {
-                ui::InputResult::NeedsUpdate => {
+                    app.draw_top(f, chunks[0], chunks[1], help_text);
+                })?;
+                need_redraw = false;
+            }
+
+            match events.rx.recv() {
+                Err(..) => break,
+                Ok(Event::Key(KeyEvent { code: KeyCode::Esc, .. }))
+                | Ok(Event::Key(KeyEvent {
+                    code: KeyCode::Char('q'),
+                    ..
+                })) => break,
+                Ok(Event::Key(KeyEvent {
+                    code: KeyCode::Char('c'),
+                    modifiers,
+                    ..
+                })) if modifiers.contains(KeyModifiers::CONTROL) => break,
+
+                Ok(Event::Key(k)) => match app.handle_input(k, tab_body_height) {
+                    ui::InputResult::NeedsUpdate => {
+                        need_redraw = true;
+                        app.tick();
+                    }
+                    ui::InputResult::NeedsRedraw => {
+                        need_redraw = true;
+                    }
+                    _ => {}
+                },
+                Ok(Event::Tick) => {
                     need_redraw = true;
                     app.tick();
                 }
-                ui::InputResult::NeedsRedraw => {
-                    need_redraw = true;
-                }
-                _ => {}
-            },
-            Ok(Event::Tick) => {
-                need_redraw = true;
-                app.tick();
-            }
 
-            _ => {}
+                _ => {}
+            }
         }
     }
+
+    crossterm::execute!(stdout, LeaveAlternateScreen)?;
+    crossterm::terminal::disable_raw_mode()?;
 
     //println!("\n-----");
     //println!("{:?}", prc);

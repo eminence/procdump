@@ -1,5 +1,5 @@
+use crossterm::event::KeyEvent;
 use procfs::process::Process;
-use termion::event::Key;
 use tui::{backend::Backend, layout::Rect, text::Text, Frame};
 
 use super::InputResult;
@@ -31,5 +31,5 @@ pub trait AppWidget {
 
     fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text);
     fn update(&mut self, proc: &Process);
-    fn handle_input(&mut self, input: Key, height: u16) -> InputResult;
+    fn handle_input(&mut self, input: KeyEvent, height: u16) -> InputResult;
 }

@@ -1,10 +1,10 @@
 use std::time::Instant;
 
+use crossterm::event::KeyEvent;
 use procfs::{
     process::{Process, SmapsRollup},
     ProcResult,
 };
-use termion::event::Key;
 use tui::{
     backend::Backend,
     layout::Rect,
@@ -118,7 +118,7 @@ impl AppWidget for MemWidget {
         }
     }
 
-    fn handle_input(&mut self, _input: Key, _heightt: u16) -> InputResult {
+    fn handle_input(&mut self, _input: KeyEvent, _heightt: u16) -> InputResult {
         InputResult::None
     }
 }

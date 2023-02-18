@@ -4,11 +4,11 @@ use std::fmt::Display;
 use std::sync::mpsc;
 use std::thread;
 
+use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 use procfs::{
     process::{all_processes, LimitValue, Process},
     ProcResult,
 };
-use termion::event::{Key, MouseEvent};
 use tui::text::{Span, Spans};
 
 #[derive(Debug)]
@@ -223,7 +223,7 @@ pub(crate) fn fmt_rate(b: f32, suffix: &'static str) -> String {
 
 #[derive(Debug)]
 pub(crate) enum Event {
-    Key(Key),
+    Key(KeyEvent),
     Mouse(MouseEvent),
     Tick,
 }
@@ -240,22 +240,23 @@ impl Events {
         thread::Builder::new()
             .name("kbd-reader".to_owned())
             .spawn(move || {
-                use termion::event::Event as TEvent;
-                use termion::input::TermRead;
-                let stdin = std::io::stdin();
-                for evt in stdin.events() {
+                use crossterm::event::{read, Event, KeyEvent};
+
+                loop {
+                    let evt = read();
                     if let Err(..) = match evt {
                         Err(..) => return,
-                        Ok(TEvent::Key(k)) => kbd_tx.send(self::Event::Key(k)),
-                        Ok(TEvent::Mouse(m)) => kbd_tx.send(self::Event::Mouse(m)),
-                        Ok(TEvent::Unsupported(bytes)) => match bytes.as_slice() {
-                            // manual parsing of cursor movement keys in application mode
-                            [0x1b, 79, 65] => kbd_tx.send(self::Event::Key(Key::Up)),
-                            [0x1b, 79, 66] => kbd_tx.send(self::Event::Key(Key::Down)),
-                            [0x1b, 79, 67] => kbd_tx.send(self::Event::Key(Key::Right)),
-                            [0x1b, 79, 68] => kbd_tx.send(self::Event::Key(Key::Left)),
-                            _ => continue,
-                        },
+                        Ok(Event::Key(e)) => kbd_tx.send(self::Event::Key(e)),
+                        Ok(Event::Mouse(m)) => kbd_tx.send(self::Event::Mouse(m)),
+                        _ => continue
+                        // Ok(Event::Unsupported(bytes)) => match bytes.as_slice() {
+                        //     // manual parsing of cursor movement keys in application mode
+                        //     [0x1b, 79, 65] => kbd_tx.send(self::Event::Key(Key::Up)),
+                        //     [0x1b, 79, 66] => kbd_tx.send(self::Event::Key(Key::Down)),
+                        //     [0x1b, 79, 67] => kbd_tx.send(self::Event::Key(Key::Right)),
+                        //     [0x1b, 79, 68] => kbd_tx.send(self::Event::Key(Key::Left)),
+                        //     _ => continue,
+                        // },
                     } {
                         return;
                     }

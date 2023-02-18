@@ -5,8 +5,8 @@ use std::{
     time::Instant,
 };
 
+use crossterm::event::{KeyCode, KeyEvent};
 use procfs::{process::Process, ProcResult, ProcessCgroup};
-use termion::event::Key;
 use tui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
@@ -214,9 +214,9 @@ impl AppWidget for CGroupWidget {
             self.last_updated = Instant::now();
         }
     }
-    fn handle_input(&mut self, input: Key, _height: u16) -> InputResult {
-        match input {
-            Key::Up => {
+    fn handle_input(&mut self, input: KeyEvent, _height: u16) -> InputResult {
+        match input.code {
+            KeyCode::Up => {
                 if self.select_idx > 0 {
                     self.select_idx -= 1;
                     InputResult::NeedsRedraw
@@ -224,7 +224,7 @@ impl AppWidget for CGroupWidget {
                     InputResult::None
                 }
             }
-            Key::Down => {
+            KeyCode::Down => {
                 let max = self.proc_groups.as_ref().map_or_else(|_| 0, |v| v.len() - 1);
                 if (self.select_idx as usize) < max {
                     self.select_idx += 1;

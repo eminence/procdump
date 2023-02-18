@@ -1,7 +1,7 @@
 use std::time::Instant;
 
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use procfs::process::Process;
-use termion::event::Key;
 use tui::{
     backend::Backend,
     layout::Rect,
@@ -179,7 +179,7 @@ impl AppWidget for TreeWidget {
             }
         }
     }
-    fn handle_input(&mut self, input: Key, _height: u16) -> InputResult {
+    fn handle_input(&mut self, input: KeyEvent, _height: u16) -> InputResult {
         let flattened = self.tree.flatten();
         // the current index of the selected pid
         let mut select_idx = flattened
@@ -190,12 +190,16 @@ impl AppWidget for TreeWidget {
             .0 as i32;
 
         let r = match input {
-            Key::Ctrl('t') => {
+            KeyEvent {
+                code: KeyCode::Char('t'),
+                modifiers,
+                ..
+            } if modifiers.contains(KeyModifiers::CONTROL) => {
                 self.show_all = !self.show_all;
                 self.force_update = true;
                 return InputResult::NeedsUpdate;
             }
-            Key::Up => {
+            KeyEvent { code: KeyCode::Up, .. } => {
                 if select_idx > 0 {
                     select_idx -= 1;
                     true
@@ -203,7 +207,9 @@ impl AppWidget for TreeWidget {
                     false
                 }
             }
-            Key::Down => {
+            KeyEvent {
+                code: KeyCode::Down, ..
+            } => {
                 if select_idx < flattened.len() as i32 {
                     select_idx += 1;
                     true

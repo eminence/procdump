@@ -1,7 +1,7 @@
 use std::{borrow::Cow, time::Instant};
 
+use crossterm::event::KeyEvent;
 use procfs::{process::Process, ProcResult};
-use termion::event::Key;
 use tui::{
     backend::Backend,
     layout::{Constraint, Rect},
@@ -246,7 +246,7 @@ impl AppWidget for LimitWidget {
             self.last_updated = Instant::now();
         }
     }
-    fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
+    fn handle_input(&mut self, input: KeyEvent, height: u16) -> InputResult {
         self.scroll.handle_input(input, height)
     }
 }

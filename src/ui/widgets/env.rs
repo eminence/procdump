@@ -1,7 +1,7 @@
 use std::{collections::HashMap, ffi::OsString, time::Instant};
 
+use crossterm::event::KeyEvent;
 use procfs::{process::Process, ProcError};
-use termion::event::Key;
 use tui::{
     backend::Backend,
     layout::Rect,
@@ -37,7 +37,7 @@ impl EnvWidget {
 
 impl AppWidget for EnvWidget {
     const TITLE: &'static str = "Env";
-    fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
+    fn handle_input(&mut self, input: KeyEvent, height: u16) -> InputResult {
         self.scroll.handle_input(input, height)
     }
 

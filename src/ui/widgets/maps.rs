@@ -1,10 +1,10 @@
 use std::time::Instant;
 
+use crossterm::event::{KeyCode, KeyEvent};
 use procfs::{
     process::{MMapPath, MemoryMap, MemoryMapData, Process},
     ProcResult,
 };
-use termion::event::Key;
 use tui::{
     backend::Backend,
     layout::Rect,
@@ -174,8 +174,8 @@ impl AppWidget for MapsWidget {
             self.force_update = false;
         }
     }
-    fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
-        if let Key::Char('d') = input {
+    fn handle_input(&mut self, input: KeyEvent, height: u16) -> InputResult {
+        if let KeyCode::Char('d') = input.code {
             self.want_smaps = !self.want_smaps;
             self.force_update = true;
             return InputResult::NeedsUpdate;

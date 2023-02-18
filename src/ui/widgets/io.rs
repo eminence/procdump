@@ -1,7 +1,7 @@
 use std::time::Instant;
 
+use crossterm::event::KeyEvent;
 use procfs::process::Process;
-use termion::event::Key;
 use tui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
@@ -208,7 +208,7 @@ impl AppWidget for IOWidget {
             self.last_updated = Instant::now();
         }
     }
-    fn handle_input(&mut self, _input: Key, _height: u16) -> InputResult {
+    fn handle_input(&mut self, _input: KeyEvent, _height: u16) -> InputResult {
         InputResult::NeedsRedraw
     }
 }

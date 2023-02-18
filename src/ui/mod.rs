@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use termion::event::Key;
+use crossterm::event::{KeyCode, KeyEvent};
 use tui::layout::Rect;
 use tui::style::*;
 use tui::terminal::Frame;
@@ -98,15 +98,15 @@ impl ScrollController {
         }
         self.max_scroll = max;
     }
-    fn handle_input(&mut self, input: Key, height: u16) -> InputResult {
+    fn handle_input(&mut self, input: KeyEvent, height: u16) -> InputResult {
         let pageupdown_size = height / 3;
-        match input {
-            Key::Down | Key::PageDown | Key::End => {
+        match input.code {
+            KeyCode::Down | KeyCode::PageDown | KeyCode::End => {
                 let to_move = (self.max_scroll as i32 - self.scroll_offset as i32).clamp(
                     0,
-                    if input == Key::PageDown {
+                    if input.code == KeyCode::PageDown {
                         pageupdown_size
-                    } else if input == Key::End {
+                    } else if input.code == KeyCode::End {
                         self.max_scroll
                     } else {
                         1
@@ -119,7 +119,7 @@ impl ScrollController {
                     InputResult::None
                 }
             }
-            Key::Home => {
+            KeyCode::Home => {
                 let p = self.scroll_offset;
                 self.scroll_offset = 0;
                 if p > 0 {
@@ -128,8 +128,12 @@ impl ScrollController {
                     InputResult::None
                 }
             }
-            Key::Up | Key::PageUp => {
-                let mut to_move = if input == Key::PageUp { pageupdown_size } else { 1 } as i32;
+            KeyCode::Up | KeyCode::PageUp => {
+                let mut to_move = if input.code == KeyCode::PageUp {
+                    pageupdown_size
+                } else {
+                    1
+                } as i32;
                 if self.scroll_offset as i32 - to_move < 0 {
                     to_move = self.scroll_offset as i32;
                 }
