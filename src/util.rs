@@ -4,7 +4,7 @@ use std::fmt::Display;
 use std::sync::mpsc;
 use std::thread;
 
-use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
+use crossterm::event::{KeyEvent, MouseEvent};
 use procfs::{
     process::{all_processes, LimitValue, Process},
     ProcResult,
@@ -240,7 +240,7 @@ impl Events {
         thread::Builder::new()
             .name("kbd-reader".to_owned())
             .spawn(move || {
-                use crossterm::event::{read, Event, KeyEvent};
+                use crossterm::event::{read, Event};
 
                 loop {
                     let evt = read();

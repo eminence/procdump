@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent};
 use procfs::{
-    process::{MMapPath, MemoryMap, MemoryMaps, Process},
+    process::{MMapPath, MemoryMaps, Process},
     ProcResult,
 };
 use tui::{

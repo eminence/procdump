@@ -573,7 +573,7 @@ impl<'a> App<'a> {
 
 /// Dedicated input testing mode, to debug terminals that don't report key presses in an expected way
 fn run_keyboard_input_test() -> Result<(), anyhow::Error> {
-    use crossterm::event::{read, Event, KeyEvent};
+    use crossterm::event::{read, Event};
 
     crossterm::terminal::enable_raw_mode()?;
 
