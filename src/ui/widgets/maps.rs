@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent};
 use procfs::{
-    process::{MMapPath, MemoryMap, MemoryMapData, Process},
+    process::{MMapPath, MemoryMap, MemoryMaps, Process},
     ProcResult,
 };
 use tui::{
@@ -22,8 +22,8 @@ use crate::{
 use super::AppWidget;
 
 enum Maps {
-    Maps(ProcResult<Vec<MemoryMap>>),
-    SMaps(ProcResult<Vec<(MemoryMap, MemoryMapData)>>),
+    Maps(ProcResult<MemoryMaps>),
+    SMaps(ProcResult<MemoryMaps>),
 }
 
 pub struct MapsWidget {
@@ -75,10 +75,10 @@ impl AppWidget for MapsWidget {
 
         match &self.maps {
             Maps::Maps(Ok(maps)) => {
-                for map in maps {
+                for map in &maps.memory_maps {
                     let mut line = vec![
                         Span::raw(format!("0x{:012x}-0x{:012x} ", map.address.0, map.address.1)),
-                        Span::raw(format!("{} ", map.perms)),
+                        Span::raw(format!("{} ", map.perms.as_str())),
                         Span::raw(format!("0x{: <8x} ", map.offset)),
                     ];
                     match &map.pathname {
@@ -108,14 +108,14 @@ impl AppWidget for MapsWidget {
                     Span::styled("Size       ", header_style),
                     Span::styled("Rss        ", header_style),
                 ]));
-                for (map, map_data) in maps {
+                for map in &maps.memory_maps {
                     let mut line = vec![
                         Span::raw(format!("0x{:012x}-0x{:012x} ", map.address.0, map.address.1)),
-                        Span::raw(format!("{:4} ", map.perms)),
+                        Span::raw(format!("{} ", map.perms.as_str())),
                         Span::raw(format!("0x{: <8x} ", map.offset)),
                         Span::raw(format!(
                             "{:10} ",
-                            map_data
+                            map.extension
                                 .map
                                 .get("Size")
                                 .map(|b| fmt_bytes(*b, "B"))
@@ -123,7 +123,7 @@ impl AppWidget for MapsWidget {
                         )),
                         Span::raw(format!(
                             "{:10} ",
-                            map_data
+                            map.extension
                                 .map
                                 .get("Rss")
                                 .map(|b| fmt_bytes(*b, "B"))

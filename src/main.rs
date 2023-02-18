@@ -119,7 +119,7 @@ impl StatDelta<procfs::process::Io> {
             new: s,
             old_when: now,
             new_when: now,
-            tps: procfs::ticks_per_second().unwrap(),
+            tps: procfs::ticks_per_second(),
         })
     }
     fn update(&mut self, proc: &Process) {
@@ -141,7 +141,7 @@ impl StatDelta<procfs::process::Stat> {
             new: s,
             old_when: now,
             new_when: now,
-            tps: procfs::ticks_per_second().unwrap(),
+            tps: procfs::ticks_per_second(),
         }
     }
     fn update(&mut self, proc: &Process) {
@@ -235,7 +235,7 @@ impl<'a> App<'a> {
             cgroup_widget: ui::widgets::CGroupWidget::new(&proc),
             io_widget: ui::widgets::IOWidget::new(&proc),
             task_widget: ui::widgets::TaskWidget::new(&proc),
-            tps: procfs::ticks_per_second().unwrap(),
+            tps: procfs::ticks_per_second(),
             stat_d: StatDelta::<procfs::process::Stat>::new(&proc),
             tab: TabState::new(&[
                 ui::widgets::EnvWidget::TITLE,
