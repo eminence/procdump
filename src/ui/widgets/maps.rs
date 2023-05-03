@@ -75,7 +75,7 @@ impl AppWidget for MapsWidget {
 
         match &self.maps {
             Maps::Maps(Ok(maps)) => {
-                for map in &maps.memory_maps {
+                for map in &maps.0 {
                     let mut line = vec![
                         Span::raw(format!("0x{:012x}-0x{:012x} ", map.address.0, map.address.1)),
                         Span::raw(format!("{} ", map.perms.as_str())),
@@ -108,7 +108,7 @@ impl AppWidget for MapsWidget {
                     Span::styled("Size       ", header_style),
                     Span::styled("Rss        ", header_style),
                 ]));
-                for map in &maps.memory_maps {
+                for map in &maps.0 {
                     let mut line = vec![
                         Span::raw(format!("0x{:012x}-0x{:012x} ", map.address.0, map.address.1)),
                         Span::raw(format!("{} ", map.perms.as_str())),

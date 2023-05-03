@@ -4,6 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{ClearType, EnterAlternateScreen, LeaveAlternateScreen};
 use procfs::process::{self, Process};
+use procfs::{Current, WithSystemInfo};
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::*;
 use tui::terminal::{Frame, Terminal};
@@ -401,7 +402,11 @@ impl<'a> App<'a> {
                 Span::raw("X\u{00A0}(Dead) ".to_string())
             },
             Span::styled("started:", s),
-            if let Ok(dt) = self.proc_stat.starttime() {
+            if let Ok(dt) = self
+                .proc_stat
+                .starttime()
+                .with_system_info(procfs::current_system_info())
+            {
                 Span::raw(format!("{} ", fmt_time(dt)))
             } else {
                 Span::styled("(unknown) ", Style::default().fg(Color::Red).bg(Color::Reset))

@@ -23,3 +23,5 @@ backtrace = {version = "0.3.40", optional = true}
 indexmap = "1"
 crossterm = "0.26.0"
 
+[patch.crates-io]
+procfs = {git = "https://github.com/eminence/procfs.git"}

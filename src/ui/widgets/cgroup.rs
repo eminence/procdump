@@ -6,7 +6,7 @@ use std::{
 };
 
 use crossterm::event::{KeyCode, KeyEvent};
-use procfs::{process::Process, ProcResult, ProcessCgroup};
+use procfs::{process::Process, ProcResult, ProcessCGroup};
 use tui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
@@ -21,7 +21,7 @@ use crate::ui::{InputResult, TEN_SECONDS};
 use super::AppWidget;
 
 pub struct CGroupWidget {
-    proc_groups: ProcResult<Vec<ProcessCgroup>>,
+    proc_groups: ProcResult<Vec<ProcessCGroup>>,
     last_updated: Instant,
 
     // map from controller name to mount path
@@ -36,6 +36,7 @@ impl CGroupWidget {
         // get the list of v1 controllers on this system
         let groups: HashSet<String> = procfs::cgroups()
             .ok()
+            .map(|cgcs| cgcs.0)
             .unwrap_or_default()
             .into_iter()
             .filter_map(|cg| if cg.enabled { Some(cg.name) } else { None })
@@ -52,8 +53,8 @@ impl CGroupWidget {
         }
 
         let groups = proc.cgroups().map(|mut l| {
-            l.sort_by_key(|g| g.hierarchy);
-            l
+            l.0.sort_by_key(|g| g.hierarchy);
+            l.0
         });
 
         CGroupWidget {
@@ -208,8 +209,8 @@ impl AppWidget for CGroupWidget {
     fn update(&mut self, proc: &Process) {
         if self.last_updated.elapsed() > TEN_SECONDS {
             self.proc_groups = proc.cgroups().map(|mut l| {
-                l.sort_by_key(|g| g.hierarchy);
-                l
+                l.0.sort_by_key(|g| g.hierarchy);
+                l.0
             });
             self.last_updated = Instant::now();
         }

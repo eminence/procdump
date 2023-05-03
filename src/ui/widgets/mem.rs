@@ -43,7 +43,7 @@ impl AppWidget for MemWidget {
         match &self.rollup {
             Ok(rollup) => {
                 let key_style = Style::default().fg(Color::Green);
-                let data = &rollup.memory_map_rollup.memory_maps[0].extension.map;
+                let data = &rollup.memory_map_rollup.0[0].extension.map;
                 if let Some(x) = data.get("Rss") {
                     text.push(Spans::from(vec![
                         Span::styled(format!("{:15}", "Rss:"), key_style),
