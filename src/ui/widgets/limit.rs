@@ -43,7 +43,7 @@ impl AppWidget for LimitWidget {
         ]);
         help_text.extend(Text::from(spans));
 
-        let header_cell_style = Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
+        let header_cell_style = Style::default().add_modifier(Modifier::BOLD);
         let headers = vec![
             Cell::from("Type").style(header_cell_style),
             Cell::from("Soft Limit").style(header_cell_style),
@@ -51,8 +51,6 @@ impl AppWidget for LimitWidget {
             Cell::from(""),
         ];
         let mut rows = Vec::new();
-
-        rows.push(Row::new(headers).bottom_margin(1));
 
         if let Ok(ref limits) = self.limits {
             rows.push(Row::new(
@@ -239,7 +237,8 @@ impl AppWidget for LimitWidget {
                 Constraint::Length(12),
                 Constraint::Length(11),
             ],
-        );
+        )
+        .header(Row::new(headers.into_iter()).style(header_cell_style).bottom_margin(1));
         f.render_widget(widget, area);
     }
     fn update(&mut self, proc: &Process) {
