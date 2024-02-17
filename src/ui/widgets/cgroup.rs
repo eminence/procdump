@@ -73,7 +73,7 @@ impl AppWidget for CGroupWidget {
             Span::styled("CGroups", Style::default().fg(Color::Yellow)),
             Span::raw(" tab shows info about the active container groups for this process."),
         ]);
-        help_text.extend(line);
+        help_text.extend(Text::from(line));
 
         // split the area in half -- the left side is a selectable list of controllers, and the
         // right side is some details about them
