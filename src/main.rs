@@ -4,14 +4,14 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{ClearType, EnterAlternateScreen, LeaveAlternateScreen};
 use procfs::process::{self, Process};
-use procfs::{Current, WithSystemInfo};
-use tui::layout::{Constraint, Direction, Layout, Rect};
-use tui::style::*;
-use tui::terminal::{Frame, Terminal};
-use tui::widgets::*;
-use tui::{
-    backend::{Backend, CrosstermBackend},
-    text::{Span, Spans, Text},
+use procfs::WithSystemInfo;
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::*;
+use ratatui::terminal::{Frame, Terminal};
+use ratatui::widgets::*;
+use ratatui::{
+    backend::CrosstermBackend,
+    text::{Line, Span, Text},
 };
 
 // pub const ERROR_STYLE: Style = Style::default().fg(Color::Red).bg(Color::Reset);
@@ -333,7 +333,7 @@ impl<'a> App<'a> {
         }
     }
 
-    fn draw_top<B: Backend>(&self, f: &mut Frame<B>, top_area: Rect, area: Rect, help_text: Text) {
+    fn draw_top(&self, f: &mut Frame, top_area: Rect, area: Rect, help_text: Text) {
         // first first line is the pid and process name
         let mut text = Vec::new();
         if let Ok(cmdline) = self.proc.cmdline() {
@@ -352,7 +352,7 @@ impl<'a> App<'a> {
         }
 
         text.push(Span::raw("\u{2500}".repeat(top_area.width as usize)));
-        f.render_widget(Paragraph::new(Spans::from(text)), top_area);
+        f.render_widget(Paragraph::new(Line::from(text)), top_area);
 
         // top frame is composed of 3 horizontal blocks
         let chunks = Layout::default()
@@ -371,7 +371,7 @@ impl<'a> App<'a> {
         // first block is basic state info
         let s = Style::default().fg(Color::Green);
 
-        // Note: everything gets put into the same Spans so it can be wrapped
+        // Note: everything gets put into the same Line so it can be wrapped
 
         let mut text: Vec<Span> = Vec::new();
 
@@ -434,14 +434,14 @@ impl<'a> App<'a> {
             Span::raw(format!("{} ", self.proc_stat.nice)),
         ]);
 
-        let widget = Paragraph::new(Spans::from(text))
+        let widget = Paragraph::new(Line::from(text))
             .block(Block::default().borders(Borders::RIGHT))
             .wrap(Wrap { trim: true });
         f.render_widget(widget, chunks[0]);
 
         // second block is CPU time info
 
-        let mut text: Vec<Spans> = Vec::new();
+        let mut text: Vec<Line> = Vec::new();
         let stat = self.stat_d.latest();
         let u_time = Duration::from_millis(stat.utime * (1000.0 / self.tps as f32) as u64);
         let s_time = Duration::from_millis(stat.stime * (1000.0 / self.tps as f32) as u64);
@@ -450,7 +450,7 @@ impl<'a> App<'a> {
 
         // first line:
         // cpu usage:0.00%
-        text.push(Spans::from(vec![
+        text.push(Line::from(vec![
             Span::styled("cpu usage:", s),
             Span::raw(format!("{usage:.2}%")),
         ]));
@@ -459,7 +459,7 @@ impl<'a> App<'a> {
         // │user time:70ms kernel time:10ms u/k:87.50%
         let percent_user = stat.utime as f32 / (stat.utime + stat.stime) as f32;
 
-        text.push(Spans::from(vec![
+        text.push(Line::from(vec![
             Span::styled("user\u{00A0}time:", s),
             Span::raw(format!("{u_time:?} ")),
             Span::styled("kernel\u{00A0}time:", s),
@@ -489,7 +489,7 @@ impl<'a> App<'a> {
                 line.push(Span::raw(format!("{} ", fmt_bytes((shr + rss) * 1024, "B"))));
             }
         }
-        text.push(Spans::from(line));
+        text.push(Line::from(line));
 
         let widget = Paragraph::new(text)
             .block(Block::default().borders(Borders::RIGHT))
@@ -501,8 +501,8 @@ impl<'a> App<'a> {
         f.render_widget(widget, chunks[2]);
     }
 
-    fn draw_tab_selector<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
-        let titles = self.tab.labels.iter().cloned().map(Spans::from).collect();
+    fn draw_tab_selector(&self, f: &mut Frame, area: Rect) {
+        let titles = self.tab.labels.iter().cloned().map(Line::from);
         let widget = Tabs::new(titles)
             .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
             // .titles(self.tab.labels)
@@ -511,7 +511,7 @@ impl<'a> App<'a> {
             .highlight_style(Style::default().fg(Color::Yellow));
         f.render_widget(widget, area);
     }
-    fn draw_tab_body<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
+    fn draw_tab_body(&mut self, f: &mut Frame, area: Rect, help_text: &mut Text) {
         // split this into the body and a scrollbar area
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -560,7 +560,7 @@ impl<'a> App<'a> {
             }
         }
     }
-    fn draw_cpu_spark<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+    fn draw_cpu_spark(&mut self, f: &mut Frame, area: Rect) {
         // cpu sparkline (how the last area.width datapoints)
         let data = self.cpu_spark.as_slice();
         let s = std::cmp::max(0, data.len() as i32 - area.width as i32) as usize;

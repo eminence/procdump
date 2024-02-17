@@ -2,11 +2,10 @@ use std::time::Instant;
 
 use crossterm::event::KeyEvent;
 use procfs::process::Process;
-use tui::{
-    backend::Backend,
+use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
-    text::{Span, Spans, Text},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, Paragraph, Sparkline, Wrap},
     Frame,
 };
@@ -43,8 +42,8 @@ impl IOWidget {
 
 impl AppWidget for IOWidget {
     const TITLE: &'static str = "IO";
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
-        let spans = Spans::from(vec![
+    fn draw(&mut self, f: &mut Frame, area: Rect, help_text: &mut Text) {
+        let spans = Line::from(vec![
             Span::raw("The "),
             Span::styled("IO", Style::default().fg(Color::Yellow)),
             Span::raw(" tab shows various I/O stats. The "),
@@ -64,7 +63,7 @@ impl AppWidget for IOWidget {
             .split(area);
 
         let spark_colors = [Color::LightCyan, Color::LightMagenta, Color::LightGreen];
-        let mut text: Vec<Spans> = Vec::new();
+        let mut text: Vec<Line> = Vec::new();
         let s = Style::default().fg(Color::Green);
         if let Ok(ref io_d) = self.io_d {
             let io = io_d.latest();
@@ -73,7 +72,7 @@ impl AppWidget for IOWidget {
             let dur_sec = duration.as_millis() as f32 / 1000.0;
 
             // all IO
-            text.push(Spans::from(vec![
+            text.push(Line::from(vec![
                 Span::styled("all io read: ", s),
                 Span::raw(format!("{: <12}", fmt_bytes(io.rchar, "B"))),
                 Span::styled("all io write:", s),
@@ -84,7 +83,7 @@ impl AppWidget for IOWidget {
             let io_read_rate = (io.rchar - prev_io.rchar) as f32 / dur_sec;
             let io_write_rate = (io.wchar - prev_io.wchar) as f32 / dur_sec;
 
-            text.push(Spans::from(vec![
+            text.push(Line::from(vec![
                 Span::styled("read rate:   ", s),
                 Span::raw(format!("{: <12}", fmt_rate(io_read_rate, "Bps"))),
                 Span::styled("write rate:  ", s),
@@ -93,7 +92,7 @@ impl AppWidget for IOWidget {
             ]));
 
             // syscalls
-            text.push(Spans::from(vec![
+            text.push(Line::from(vec![
                 Span::styled("read ops:    ", s),
                 Span::raw(format!("{: <12}", fmt_bytes(io.syscr, ""))),
                 Span::styled("write ops:   ", s),
@@ -104,7 +103,7 @@ impl AppWidget for IOWidget {
             let io_rop_rate = (io.syscr - prev_io.syscr) as f32 / dur_sec;
             let io_wop_rate = (io.syscw - prev_io.syscw) as f32 / dur_sec;
 
-            text.push(Spans::from(vec![
+            text.push(Line::from(vec![
                 Span::styled("op rate:     ", s),
                 Span::raw(format!("{: <12}", fmt_rate(io_rop_rate, "ps"))),
                 Span::styled("op rate:     ", s),
@@ -113,7 +112,7 @@ impl AppWidget for IOWidget {
             ]));
 
             // disk IO
-            text.push(Spans::from(vec![
+            text.push(Line::from(vec![
                 Span::styled("disk reads:  ", s),
                 Span::raw(format!("{: <12}", fmt_bytes(io.read_bytes, "B"))),
                 Span::styled("disk writes: ", s),
@@ -124,7 +123,7 @@ impl AppWidget for IOWidget {
             let disk_read_rate = (io.read_bytes - prev_io.read_bytes) as f32 / dur_sec;
             let disk_write_rate = (io.write_bytes - prev_io.write_bytes) as f32 / dur_sec;
 
-            text.push(Spans::from(vec![
+            text.push(Line::from(vec![
                 Span::styled("disk rate:   ", s),
                 Span::raw(format!("{: <12}", fmt_rate(disk_read_rate, "Bps"))),
                 Span::styled("disk rate:   ", s),

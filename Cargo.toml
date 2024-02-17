@@ -15,7 +15,7 @@ license = "MIT OR Apache-2.0"
 procfs = { version = "0.16.0" }
 terminal_size = "0.3.0"
 libc = "0.2"
-tui = { version = "0.19", default-features = false, features = ["crossterm"] }
+ratatui = { version = "0.26", default-features = false, features = ["crossterm"] }
 log = "0.4"
 anyhow = "1"
 chrono = "0.4"

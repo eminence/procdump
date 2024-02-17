@@ -6,11 +6,10 @@ use procfs::{
     process::{FDTarget, Process},
     ProcResult,
 };
-use tui::{
-    backend::Backend,
+use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
-    text::{Span, Spans, Text},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
@@ -48,17 +47,17 @@ impl FilesWidget {
             scroll: ScrollController::new(),
         }
     }
-    pub fn draw_scrollbar<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+    pub fn draw_scrollbar(&self, f: &mut Frame, area: Rect) {
         self.scroll.draw_scrollbar(f, area)
     }
 }
 
 impl AppWidget for FilesWidget {
     const TITLE: &'static str = "Files";
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
-        let mut text: Vec<Spans> = Vec::new();
+    fn draw(&mut self, f: &mut Frame, area: Rect, help_text: &mut Text) {
+        let mut text: Vec<Line> = Vec::new();
 
-        let spans = Spans::from(vec![
+        let spans = Line::from(vec![
             Span::raw("The "),
             Span::styled("Files", Style::default().fg(Color::Yellow)),
             Span::raw(" tab shows the currently open files."),
@@ -151,11 +150,11 @@ impl AppWidget for FilesWidget {
                         }
                         x => line.push(Span::raw(format!("{x:?}"))),
                     }
-                    text.push(Spans::from(line));
+                    text.push(Line::from(line));
                 }
             }
             Err(ref e) => {
-                text.push(Spans::from(Span::styled(
+                text.push(Line::from(Span::styled(
                     format!("Error getting fds: {e}"),
                     Style::default().fg(Color::Red).bg(Color::Reset),
                 )));

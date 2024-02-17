@@ -1,14 +1,11 @@
 use std::time::Duration;
 
 use crossterm::event::{KeyCode, KeyEvent};
-use tui::layout::Rect;
-use tui::style::*;
-use tui::terminal::Frame;
-use tui::widgets::*;
-use tui::{
-    backend::Backend,
-    text::{Span, Spans},
-};
+use ratatui::layout::Rect;
+use ratatui::style::*;
+use ratatui::terminal::Frame;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::*;
 
 pub mod widgets;
 
@@ -50,7 +47,7 @@ impl ScrollController {
             max_scroll: 0,
         }
     }
-    fn draw_scrollbar<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+    fn draw_scrollbar(&self, f: &mut Frame, area: Rect) {
         let p = (self.scroll_offset as f32 / self.max_scroll as f32) * area.height as f32;
         if p.is_nan() {
             return;
@@ -60,10 +57,10 @@ impl ScrollController {
         assert!((0.0..=1.0).contains(&rest), "rest={rest} p={p}");
         //let symbols = "·⸱⸳.";
         let symbols = "\u{2588}\u{2587}\u{2586}\u{2585}\u{2584}\u{2583}\u{2582}\u{2581} "; // "█▇▆▅▄▃▂▁";
-        let mut text: Vec<Spans> = Vec::new();
+        let mut text: Vec<Line> = Vec::new();
         text.resize(
             text.len() + whole as usize,
-            Spans::from(Span::styled(
+            Line::from(Span::styled(
                 "_",
                 Style::default().fg(Color::Magenta).bg(Color::Magenta),
             )),
@@ -80,11 +77,11 @@ impl ScrollController {
                 Color::White
             };
             let s = format!("{}", if c.is_whitespace() { '+' } else { c });
-            text.push(Spans::from(Span::styled(s, Style::default().fg(fg).bg(Color::Magenta))));
+            text.push(Line::from(Span::styled(s, Style::default().fg(fg).bg(Color::Magenta))));
         }
         text.resize(
             text.len() + area.height as usize,
-            Spans::from(Span::styled("_", Style::default().fg(Color::White).bg(Color::White))),
+            Line::from(Span::styled("_", Style::default().fg(Color::White).bg(Color::White))),
         );
 
         let widget = Paragraph::new(text).style(Style::default().fg(Color::White));

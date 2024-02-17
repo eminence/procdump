@@ -6,11 +6,10 @@ use procfs::{
     process::{FDInfo, Process},
     ProcError,
 };
-use tui::{
-    backend::Backend,
+use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
-    text::{Span, Spans, Text},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
@@ -39,17 +38,17 @@ impl NetWidget {
             scroll: ScrollController::new(),
         }
     }
-    pub fn draw_scrollbar<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+    pub fn draw_scrollbar(&self, f: &mut Frame, area: Rect) {
         self.scroll.draw_scrollbar(f, area)
     }
 }
 
 impl AppWidget for NetWidget {
     const TITLE: &'static str = "Net";
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
-        let mut text: Vec<Spans> = Vec::new();
+    fn draw(&mut self, f: &mut Frame, area: Rect, help_text: &mut Text) {
+        let mut text: Vec<Line> = Vec::new();
 
-        let spans = Spans::from(vec![
+        let spans = Line::from(vec![
             Span::raw("The "),
             Span::styled("Net", Style::default().fg(Color::Yellow)),
             Span::raw(" tab shows all of the open network connections."),
@@ -61,7 +60,7 @@ impl AppWidget for NetWidget {
                 for fd in fd {
                     if let procfs::process::FDTarget::Socket(inode) = fd.target {
                         if let Some(entry) = self.tcp_map.get(&inode) {
-                            text.push(Spans::from(vec![
+                            text.push(Line::from(vec![
                                 Span::styled("[tcp] ", Style::default().fg(Color::Green)),
                                 Span::raw(format!(
                                     " {} -> {} ({:?})",
@@ -70,7 +69,7 @@ impl AppWidget for NetWidget {
                             ]));
                         }
                         if let Some(entry) = self.udp_map.get(&inode) {
-                            text.push(Spans::from(vec![
+                            text.push(Line::from(vec![
                                 Span::styled("[udp] ", Style::default().fg(Color::Blue)),
                                 Span::raw(format!(
                                     " {} -> {} ({:?})",
@@ -79,7 +78,7 @@ impl AppWidget for NetWidget {
                             ]));
                         }
                         if let Some(entry) = self.unix_map.get(&inode) {
-                            text.push(Spans::from(vec![
+                            text.push(Line::from(vec![
                                 Span::styled("[unix]", Style::default().fg(Color::Yellow)),
                                 Span::raw(match entry.socket_type as i32 {
                                     libc::SOCK_STREAM => " STREAM    ",
@@ -99,7 +98,7 @@ impl AppWidget for NetWidget {
                 }
             }
             Err(e) => {
-                text.push(Spans::from(Span::styled(
+                text.push(Line::from(Span::styled(
                     format!("Error getting network connections: {e}"),
                     Style::default().fg(Color::Red).bg(Color::Reset),
                 )));
@@ -107,7 +106,7 @@ impl AppWidget for NetWidget {
         }
 
         if text.is_empty() {
-            text.push(Spans::from(Span::styled(
+            text.push(Line::from(Span::styled(
                 "(no network connections)",
                 Style::default().fg(Color::Gray).add_modifier(Modifier::DIM),
             )));

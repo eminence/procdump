@@ -2,11 +2,10 @@ use std::{collections::HashMap, ffi::OsString, time::Instant};
 
 use crossterm::event::KeyEvent;
 use procfs::{process::Process, ProcError};
-use tui::{
-    backend::Backend,
+use ratatui::{
     layout::Rect,
     style::{Color, Style},
-    text::{Span, Spans, Text},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
 };
@@ -30,7 +29,7 @@ impl EnvWidget {
             scroll: ScrollController::new(),
         }
     }
-    pub fn draw_scrollbar<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+    pub fn draw_scrollbar(&self, f: &mut Frame, area: Rect) {
         self.scroll.draw_scrollbar(f, area)
     }
 }
@@ -47,10 +46,10 @@ impl AppWidget for EnvWidget {
             self.last_updated = Instant::now();
         }
     }
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
-        let mut text: Vec<Spans> = Vec::new();
+    fn draw(&mut self, f: &mut Frame, area: Rect, help_text: &mut Text) {
+        let mut text: Vec<Line> = Vec::new();
 
-        let spans = Spans::from(vec![
+        let spans = Line::from(vec![
             Span::raw("The "),
             Span::styled("Env", Style::default().fg(Color::Yellow)),
             Span::raw(" tab shows the environment variables for the process"),
@@ -68,7 +67,7 @@ impl AppWidget for EnvWidget {
                 let mut keys: Vec<_> = map.keys().collect();
                 keys.sort_unstable();
                 for key in keys {
-                    text.push(Spans::from(vec![
+                    text.push(Line::from(vec![
                         Span::styled(key.to_string_lossy().into_owned(), Style::default().fg(Color::Green)),
                         Span::styled("=", Style::default().fg(Color::Green)),
                         Span::raw(map[key].to_string_lossy().into_owned()),

@@ -5,11 +5,10 @@ use procfs::{
     process::{MMapPath, MemoryMaps, Process},
     ProcResult,
 };
-use tui::{
-    backend::Backend,
+use ratatui::{
     layout::Rect,
     style::{Color, Style},
-    text::{Span, Spans, Text},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
@@ -44,17 +43,17 @@ impl MapsWidget {
             force_update: false,
         }
     }
-    pub fn draw_scrollbar<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+    pub fn draw_scrollbar(&self, f: &mut Frame, area: Rect) {
         self.scroll.draw_scrollbar(f, area)
     }
 }
 
 impl AppWidget for MapsWidget {
     const TITLE: &'static str = "Maps";
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
-        let mut text: Vec<Spans> = Vec::new();
+    fn draw(&mut self, f: &mut Frame, area: Rect, help_text: &mut Text) {
+        let mut text: Vec<Line> = Vec::new();
 
-        let spans = Spans::from(vec![
+        let spans = Line::from(vec![
             Span::raw("The "),
             Span::styled("Maps", Style::default().fg(Color::Yellow)),
             Span::raw(" tab shows the currently mapped memory regions. Press "),
@@ -63,7 +62,7 @@ impl AppWidget for MapsWidget {
         ]);
         help_text.extend(Text::from(spans));
         if self.want_smaps {
-            let spans = Spans::from(vec![
+            let spans = Line::from(vec![
                 Span::raw(" The "),
                 Span::styled("Size", Style::default().fg(Color::Magenta)),
                 Span::raw(" column shows the total size of the mapped page, and the "),
@@ -96,12 +95,12 @@ impl AppWidget for MapsWidget {
                         }
                         p => line.push(Span::raw(format!("{p:?}"))),
                     }
-                    text.push(Spans::from(line));
+                    text.push(Line::from(line));
                 }
             }
             Maps::SMaps(Ok(maps)) => {
                 let header_style = Style::default().fg(Color::Magenta);
-                text.push(Spans::from(vec![
+                text.push(Line::from(vec![
                     Span::styled(format!("{:29} ", "Address"), header_style),
                     Span::styled("Flag ", header_style),
                     Span::styled("Offset     ", header_style),
@@ -145,11 +144,11 @@ impl AppWidget for MapsWidget {
                         }
                         p => line.push(Span::raw(format!("{p:?}"))),
                     }
-                    text.push(Spans::from(line));
+                    text.push(Line::from(line));
                 }
             }
             Maps::Maps(Err(ref e)) | Maps::SMaps(Err(ref e)) => {
-                text.push(Spans::from(Span::styled(
+                text.push(Line::from(Span::styled(
                     format!("Error getting maps: {e}"),
                     Style::default().fg(Color::Red).bg(Color::Reset),
                 )));

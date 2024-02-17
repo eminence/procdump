@@ -9,7 +9,7 @@ use procfs::{
     process::{all_processes, LimitValue, Process},
     ProcResult,
 };
-use tui::text::{Span, Spans};
+use ratatui::text::{Line, Span};
 
 #[derive(Debug)]
 pub struct ProcessTreeEntry {
@@ -146,7 +146,7 @@ pub(crate) fn limit_to_string(limit: &LimitValue) -> Cow<'static, str> {
 
 pub(crate) fn get_numlines_from_spans<'t, I>(spans: I, width: usize) -> usize
 where
-    I: Iterator<Item = &'t Spans<'t>>,
+    I: Iterator<Item = &'t Line<'t>>,
 {
     let mut num_lines = 1;
     for span in spans {
@@ -425,7 +425,7 @@ pub(crate) fn get_unix_table(p: &procfs::process::Process) -> HashMap<u64, procf
 
 #[cfg(test)]
 mod tests {
-    use tui::text::Span;
+    use ratatui::text::Span;
 
     #[test]
     fn test_boxsize() {

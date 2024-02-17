@@ -7,11 +7,10 @@ use std::{
 
 use crossterm::event::{KeyCode, KeyEvent};
 use procfs::{process::Process, ProcResult, ProcessCGroup};
-use tui::{
-    backend::Backend,
+use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Span, Spans, Text},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
 };
@@ -68,13 +67,13 @@ impl CGroupWidget {
 
 impl AppWidget for CGroupWidget {
     const TITLE: &'static str = "CGroups";
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
-        let spans = Spans::from(vec![
+    fn draw(&mut self, f: &mut Frame, area: Rect, help_text: &mut Text) {
+        let line = Line::from(vec![
             Span::raw("The "),
             Span::styled("CGroups", Style::default().fg(Color::Yellow)),
             Span::raw(" tab shows info about the active container groups for this process."),
         ]);
-        help_text.extend(Text::from(spans));
+        help_text.extend(line);
 
         // split the area in half -- the left side is a selectable list of controllers, and the
         // right side is some details about them
@@ -88,8 +87,8 @@ impl AppWidget for CGroupWidget {
         let green = Style::default().fg(Color::Green);
         let selected = Style::default().fg(Color::Yellow);
 
-        let mut text: Vec<Spans> = Vec::new();
-        let mut details: Vec<Spans> = Vec::new();
+        let mut text: Vec<Line> = Vec::new();
+        let mut details: Vec<Line> = Vec::new();
 
         if let Ok(cgroups) = &self.proc_groups {
             for (idx, cg) in cgroups.iter().enumerate() {
@@ -115,62 +114,62 @@ impl AppWidget for CGroupWidget {
                     };
 
                     if current {
-                        details.push(Spans::from(Span::raw(format!("{groups:?}"))));
+                        details.push(Line::from(Span::raw(format!("{groups:?}"))));
                         if groups.contains("pids") {
                             let current = read_to_string(root.join("pids.current"));
                             let max = read_to_string(root.join("pids.max"));
                             if let (Ok(current), Ok(max)) = (current, max) {
-                                details.push(Spans::from(Span::raw(format!("{} of {}", current.trim(), max.trim()))));
+                                details.push(Line::from(Span::raw(format!("{} of {}", current.trim(), max.trim()))));
                             }
                         }
                         if groups.contains("freezer") {
                             let state = read_to_string(root.join("freezer.state"));
                             if let Ok(state) = state {
-                                details.push(Spans::from(Span::raw(format!("state: {}", state.trim()))));
+                                details.push(Line::from(Span::raw(format!("state: {}", state.trim()))));
                             }
                         }
                         if groups.contains("memory") {
                             if let Ok(usage) = read_to_string(root.join("memory.usage_in_bytes")) {
-                                details.push(Spans::from(Span::raw(format!("Group Usage: {} bytes", usage.trim()))));
+                                details.push(Line::from(Span::raw(format!("Group Usage: {} bytes", usage.trim()))));
                             }
                             if let Ok(limit) = read_to_string(root.join("memory.limit_in_bytes")) {
-                                details.push(Spans::from(Span::raw(format!("Group Limit: {} bytes", limit.trim()))));
+                                details.push(Line::from(Span::raw(format!("Group Limit: {} bytes", limit.trim()))));
                             }
                             if let Ok(usage) = read_to_string(root.join("memory.kmem.usage_in_bytes")) {
-                                details.push(Spans::from(Span::raw(format!("Kernel Usage: {} bytes", usage.trim()))));
+                                details.push(Line::from(Span::raw(format!("Kernel Usage: {} bytes", usage.trim()))));
                             }
                             if let Ok(limit) = read_to_string(root.join("memory.kmem.limit_in_bytes")) {
-                                details.push(Spans::from(Span::raw(format!("Kernel Limit: {} bytes", limit.trim()))));
+                                details.push(Line::from(Span::raw(format!("Kernel Limit: {} bytes", limit.trim()))));
                             }
                             if let Ok(limit) = read_to_string(root.join("memory.stat")) {
-                                details.push(Spans::from(vec![Span::raw("stats:\n"), Span::raw(limit)]));
+                                details.push(Line::from(vec![Span::raw("stats:\n"), Span::raw(limit)]));
                             }
                         }
                         if groups.contains("net_cls") {
                             if let Ok(classid) = read_to_string(root.join("net_cls.classid")) {
-                                details.push(Spans::from(Span::raw(format!("Class ID: {}", classid.trim()))));
+                                details.push(Line::from(Span::raw(format!("Class ID: {}", classid.trim()))));
                             }
                         }
                         if groups.contains("net_prio") {
                             if let Ok(idx) = read_to_string(root.join("net_prio.prioidx")) {
-                                details.push(Spans::from(Span::raw(format!("Prioidx: {idx}"))));
+                                details.push(Line::from(Span::raw(format!("Prioidx: {idx}"))));
                             }
                             if let Ok(map) = read_to_string(root.join("net_prio.ifpriomap")) {
-                                details.push(Spans::from(vec![Span::raw("ifpriomap:"), Span::raw(map)]));
+                                details.push(Line::from(vec![Span::raw("ifpriomap:"), Span::raw(map)]));
                             }
                         }
                         if groups.contains("blkio") {}
                         if groups.contains("cpuacct") {
                             if let Ok(acct) = read_to_string(root.join("cpuacct.usage")) {
-                                details.push(Spans::from(Span::raw(format!("Total nanoseconds: {}", acct.trim()))));
+                                details.push(Line::from(Span::raw(format!("Total nanoseconds: {}", acct.trim()))));
                             }
                             if let Ok(usage_all) = read_to_string(root.join("cpuacct.usage_all")) {
-                                details.push(Spans::from(Span::raw(usage_all)));
+                                details.push(Line::from(Span::raw(usage_all)));
                             }
                         }
                         {
-                            details.push(Spans::from(Span::raw(format!("--> {mountpoint:?}"))));
-                            details.push(Spans::from(Span::raw(format!("--> {:?}", cg.pathname))));
+                            details.push(Line::from(Span::raw(format!("--> {mountpoint:?}"))));
+                            details.push(Line::from(Span::raw(format!("--> {:?}", cg.pathname))));
                         }
                     }
                 } else {
@@ -184,10 +183,10 @@ impl AppWidget for CGroupWidget {
                     ));
                     line.push(Span::raw(cg.pathname.to_string()));
                     if idx == self.select_idx as usize {
-                        details.push(Spans::from(Span::raw("This controller isn't supported by procdump")));
+                        details.push(Line::from(Span::raw("This controller isn't supported by procdump")));
                     }
                 }
-                text.push(Spans::from(line));
+                text.push(Line::from(line));
             }
         }
 

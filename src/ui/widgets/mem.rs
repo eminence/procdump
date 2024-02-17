@@ -5,11 +5,10 @@ use procfs::{
     process::{Process, SmapsRollup},
     ProcResult,
 };
-use tui::{
-    backend::Backend,
+use ratatui::{
     layout::Rect,
     style::{Color, Style},
-    text::{Span, Spans, Text},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, Paragraph},
 };
 
@@ -37,70 +36,70 @@ impl MemWidget {
 impl AppWidget for MemWidget {
     const TITLE: &'static str = "Mem";
 
-    fn draw<B: Backend>(&mut self, f: &mut tui::Frame<B>, area: Rect, _help_text: &mut Text) {
-        let mut text: Vec<Spans> = Vec::new();
+    fn draw(&mut self, f: &mut ratatui::Frame, area: Rect, _help_text: &mut Text) {
+        let mut text: Vec<Line> = Vec::new();
 
         match &self.rollup {
             Ok(rollup) => {
                 let key_style = Style::default().fg(Color::Green);
                 let data = &rollup.memory_map_rollup.0[0].extension.map;
                 if let Some(x) = data.get("Rss") {
-                    text.push(Spans::from(vec![
+                    text.push(Line::from(vec![
                         Span::styled(format!("{:15}", "Rss:"), key_style),
                         Span::raw(fmt_bytes(*x, "B")),
                     ]));
                 }
                 if let Some(x) = data.get("Pss") {
-                    text.push(Spans::from(vec![
+                    text.push(Line::from(vec![
                         Span::styled(format!("{:15}", "Pss:"), key_style),
                         Span::raw(fmt_bytes(*x, "B")),
                     ]));
                 }
                 if let Some(x) = data.get("Shared_Clean") {
-                    text.push(Spans::from(vec![
+                    text.push(Line::from(vec![
                         Span::styled(format!("{:15}", "Shared_Clean:"), key_style),
                         Span::raw(fmt_bytes(*x, "B")),
                     ]));
                 }
                 if let Some(x) = data.get("Shared_Dirty") {
-                    text.push(Spans::from(vec![
+                    text.push(Line::from(vec![
                         Span::styled(format!("{:15}", "Shared_Dirty:"), key_style),
                         Span::raw(fmt_bytes(*x, "B")),
                     ]));
                 }
                 if let Some(x) = data.get("Private_Clean") {
-                    text.push(Spans::from(vec![
+                    text.push(Line::from(vec![
                         Span::styled(format!("{:15}", "Private_Clean:"), key_style),
                         Span::raw(fmt_bytes(*x, "B")),
                     ]));
                 }
                 if let Some(x) = data.get("Private_Dirty") {
-                    text.push(Spans::from(vec![
+                    text.push(Line::from(vec![
                         Span::styled(format!("{:15}", "Private_Dirty:"), key_style),
                         Span::raw(fmt_bytes(*x, "B")),
                     ]));
                 }
                 if let Some(x) = data.get("Referenced") {
-                    text.push(Spans::from(vec![
+                    text.push(Line::from(vec![
                         Span::styled(format!("{:15}", "Referenced:"), key_style),
                         Span::raw(fmt_bytes(*x, "B")),
                     ]));
                 }
                 if let Some(x) = data.get("Anonymous") {
-                    text.push(Spans::from(vec![
+                    text.push(Line::from(vec![
                         Span::styled(format!("{:15}", "Anonymous:"), key_style),
                         Span::raw(fmt_bytes(*x, "B")),
                     ]));
                 }
                 if let Some(x) = data.get("Swap") {
-                    text.push(Spans::from(vec![
+                    text.push(Line::from(vec![
                         Span::styled(format!("{:15}", "Swap:"), key_style),
                         Span::raw(fmt_bytes(*x, "B")),
                     ]));
                 }
             }
             Err(e) => {
-                text.push(Spans::from(Span::styled(
+                text.push(Line::from(Span::styled(
                     format!("Error getting memory rollup: {e}"),
                     Style::default().fg(Color::Red).bg(Color::Reset),
                 )));

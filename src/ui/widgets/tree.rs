@@ -2,11 +2,10 @@ use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use procfs::process::Process;
-use tui::{
-    backend::Backend,
+use ratatui::{
     layout::Rect,
     style::{Color, Style},
-    text::{Span, Spans, Text},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
@@ -47,8 +46,8 @@ impl TreeWidget {
 
 impl AppWidget for TreeWidget {
     const TITLE: &'static str = "Tree";
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
-        let spans = Spans::from(vec![
+    fn draw(&mut self, f: &mut Frame, area: Rect, help_text: &mut Text) {
+        let spans = Line::from(vec![
             Span::raw("The "),
             Span::styled("Tree", Style::default().fg(Color::Yellow)),
             Span::raw(" tab shows the currently selected process in a process tree. Press "),
@@ -61,7 +60,7 @@ impl AppWidget for TreeWidget {
         let self_style = Style::default().fg(Color::Yellow);
         let unselected_style = Style::default();
 
-        let mut text: Vec<Spans> = Vec::new();
+        let mut text: Vec<Line> = Vec::new();
 
         let flattened = self.tree.flatten();
 
@@ -126,7 +125,7 @@ impl AppWidget for TreeWidget {
                     unselected_style
                 },
             ));
-            text.push(Spans::from(line));
+            text.push(Line::from(line));
         }
         let select_idx = flattened
             .iter()

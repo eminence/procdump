@@ -3,11 +3,10 @@ use std::time::Instant;
 use crossterm::event::KeyEvent;
 use indexmap::IndexMap;
 use procfs::{process::Process, ProcResult};
-use tui::{
-    backend::Backend,
+use ratatui::{
     layout::Rect,
     style::{Color, Style},
-    text::{Span, Spans, Text},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
@@ -54,21 +53,21 @@ impl TaskWidget {
             scroll: ScrollController::new(),
         }
     }
-    pub fn draw_scrollbar<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+    pub fn draw_scrollbar(&self, f: &mut Frame, area: Rect) {
         self.scroll.draw_scrollbar(f, area)
     }
 }
 impl AppWidget for TaskWidget {
     const TITLE: &'static str = "Task";
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
-        let spans = Spans::from(vec![
+    fn draw(&mut self, f: &mut Frame, area: Rect, help_text: &mut Text) {
+        let spans = Line::from(vec![
             Span::raw("The "),
             Span::styled("Task", Style::default().fg(Color::Yellow)),
             Span::raw(" tab shows each thread in the process, its name, and how much CPU it's using."),
         ]);
         help_text.extend(Text::from(spans));
 
-        let mut text: Vec<Spans> = Vec::new();
+        let mut text: Vec<Line> = Vec::new();
 
         if let Ok(tasks) = &self.tasks {
             for task in tasks.values() {
@@ -81,13 +80,13 @@ impl AppWidget for TaskWidget {
                     "??%".to_string()
                 };
 
-                text.push(Spans::from(Span::raw(format!(
+                text.push(Line::from(Span::raw(format!(
                     "({:<16}) {:<5} {}",
                     name, task.task.tid, cpu_str
                 ))));
             }
         } else {
-            text.push(Spans::from(Span::raw("Error reading tasks".to_string())));
+            text.push(Line::from(Span::raw("Error reading tasks".to_string())));
         }
 
         let max_scroll = crate::get_numlines_from_spans(text.iter(), area.width as usize) as i32 - area.height as i32;

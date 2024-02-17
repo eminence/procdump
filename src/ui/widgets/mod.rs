@@ -1,6 +1,6 @@
 use crossterm::event::KeyEvent;
 use procfs::process::Process;
-use tui::{backend::Backend, layout::Rect, text::Text, Frame};
+use ratatui::{layout::Rect, text::Text, Frame};
 
 use super::InputResult;
 
@@ -29,7 +29,7 @@ pub use tree::*;
 pub trait AppWidget {
     const TITLE: &'static str;
 
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text);
+    fn draw(&mut self, f: &mut Frame, area: Rect, help_text: &mut Text);
     fn update(&mut self, proc: &Process);
     fn handle_input(&mut self, input: KeyEvent, height: u16) -> InputResult;
 }

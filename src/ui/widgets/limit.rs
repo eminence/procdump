@@ -2,11 +2,10 @@ use std::{borrow::Cow, time::Instant};
 
 use crossterm::event::KeyEvent;
 use procfs::{process::Process, ProcResult};
-use tui::{
-    backend::Backend,
+use ratatui::{
     layout::{Constraint, Rect},
     style::{Color, Modifier, Style},
-    text::{Span, Spans, Text},
+    text::{Line, Span, Text},
     widgets::{Cell, Row, Table},
     Frame,
 };
@@ -36,8 +35,8 @@ impl LimitWidget {
 
 impl AppWidget for LimitWidget {
     const TITLE: &'static str = "Limits";
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, help_text: &mut Text) {
-        let spans = Spans::from(vec![
+    fn draw(&mut self, f: &mut Frame, area: Rect, help_text: &mut Text) {
+        let spans = Line::from(vec![
             Span::raw("The "),
             Span::styled("Limits", Style::default().fg(Color::Yellow)),
             Span::raw(" tab shows the process resource limits."),
@@ -64,7 +63,7 @@ impl AppWidget for LimitWidget {
                     Cow::Borrowed("(seconds)"),
                 ]
                 .into_iter()
-                .map(tui::text::Text::raw),
+                .map(ratatui::text::Text::raw),
             ));
             rows.push(Row::new(
                 vec![
@@ -74,7 +73,7 @@ impl AppWidget for LimitWidget {
                     Cow::Borrowed("(bytes)"),
                 ]
                 .into_iter()
-                .map(tui::text::Text::raw),
+                .map(ratatui::text::Text::raw),
             ));
             rows.push(Row::new(
                 vec![
@@ -84,7 +83,7 @@ impl AppWidget for LimitWidget {
                     Cow::Borrowed("(bytes)"),
                 ]
                 .into_iter()
-                .map(tui::text::Text::raw),
+                .map(ratatui::text::Text::raw),
             ));
             rows.push(Row::new(
                 vec![
@@ -94,7 +93,7 @@ impl AppWidget for LimitWidget {
                     Cow::Borrowed("(bytes)"),
                 ]
                 .into_iter()
-                .map(tui::text::Text::raw),
+                .map(ratatui::text::Text::raw),
             ));
             rows.push(Row::new(
                 vec![
@@ -104,7 +103,7 @@ impl AppWidget for LimitWidget {
                     Cow::Borrowed("(bytes)"),
                 ]
                 .into_iter()
-                .map(tui::text::Text::raw),
+                .map(ratatui::text::Text::raw),
             ));
             rows.push(Row::new(
                 vec![
@@ -114,7 +113,7 @@ impl AppWidget for LimitWidget {
                     Cow::Borrowed("(bytes)"),
                 ]
                 .into_iter()
-                .map(tui::text::Text::raw),
+                .map(ratatui::text::Text::raw),
             ));
             rows.push(Row::new(
                 vec![
@@ -124,7 +123,7 @@ impl AppWidget for LimitWidget {
                     Cow::Borrowed(""),
                 ]
                 .into_iter()
-                .map(tui::text::Text::raw),
+                .map(ratatui::text::Text::raw),
             ));
             rows.push(Row::new(
                 vec![
@@ -134,7 +133,7 @@ impl AppWidget for LimitWidget {
                     Cow::Borrowed(""),
                 ]
                 .into_iter()
-                .map(tui::text::Text::raw),
+                .map(ratatui::text::Text::raw),
             ));
             rows.push(Row::new(
                 vec![
@@ -144,7 +143,7 @@ impl AppWidget for LimitWidget {
                     Cow::Borrowed("(bytes)"),
                 ]
                 .into_iter()
-                .map(tui::text::Text::raw),
+                .map(ratatui::text::Text::raw),
             ));
             rows.push(Row::new(
                 vec![
@@ -154,7 +153,7 @@ impl AppWidget for LimitWidget {
                     Cow::Borrowed(""),
                 ]
                 .into_iter()
-                .map(tui::text::Text::raw),
+                .map(ratatui::text::Text::raw),
             ));
             rows.push(Row::new(
                 vec![
@@ -164,7 +163,7 @@ impl AppWidget for LimitWidget {
                     Cow::Borrowed(""),
                 ]
                 .into_iter()
-                .map(tui::text::Text::raw),
+                .map(ratatui::text::Text::raw),
             ));
             rows.push(Row::new(
                 vec![
@@ -174,7 +173,7 @@ impl AppWidget for LimitWidget {
                     Cow::Borrowed(""),
                 ]
                 .into_iter()
-                .map(tui::text::Text::raw),
+                .map(ratatui::text::Text::raw),
             ));
             rows.push(Row::new(
                 vec![
@@ -184,7 +183,7 @@ impl AppWidget for LimitWidget {
                     Cow::Borrowed("(bytes)"),
                 ]
                 .into_iter()
-                .map(tui::text::Text::raw),
+                .map(ratatui::text::Text::raw),
             ));
             rows.push(Row::new(
                 vec![
@@ -194,7 +193,7 @@ impl AppWidget for LimitWidget {
                     Cow::Borrowed(""),
                 ]
                 .into_iter()
-                .map(tui::text::Text::raw),
+                .map(ratatui::text::Text::raw),
             ));
             rows.push(Row::new(
                 vec![
@@ -204,7 +203,7 @@ impl AppWidget for LimitWidget {
                     Cow::Borrowed(""),
                 ]
                 .into_iter()
-                .map(tui::text::Text::raw),
+                .map(ratatui::text::Text::raw),
             ));
             rows.push(Row::new(
                 vec![
@@ -214,7 +213,7 @@ impl AppWidget for LimitWidget {
                     Cow::Borrowed("(μseconds)"),
                 ]
                 .into_iter()
-                .map(tui::text::Text::raw),
+                .map(ratatui::text::Text::raw),
             ));
         }
 
@@ -232,12 +231,15 @@ impl AppWidget for LimitWidget {
             rows
         };
 
-        let widget = Table::new(rows.into_iter()).widths(&[
-            Constraint::Length(18),
-            Constraint::Length(12),
-            Constraint::Length(12),
-            Constraint::Length(11),
-        ]);
+        let widget = Table::new(
+            rows.into_iter(),
+            [
+                Constraint::Length(18),
+                Constraint::Length(12),
+                Constraint::Length(12),
+                Constraint::Length(11),
+            ],
+        );
         f.render_widget(widget, area);
     }
     fn update(&mut self, proc: &Process) {
