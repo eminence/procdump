@@ -63,7 +63,7 @@ impl AppWidget for TaskWidget {
         let spans = Line::from(vec![
             Span::raw("The "),
             Span::styled("Task", Style::default().fg(Color::Yellow)),
-            Span::raw(" tab shows each thread in the process, its name, and how much CPU it's using."),
+            Span::raw(" tab shows each thread in the process, its name, how much CPU it's using, and its state."),
         ]);
         help_text.extend(Text::from(spans));
 
@@ -77,12 +77,12 @@ impl AppWidget for TaskWidget {
                     let diff = task.stat.utime - prev.stat.utime;
                     format!("{:.1}%", diff as f64 / 2.0)
                 } else {
-                    "??%".to_string()
+                    "?.?%".to_string()
                 };
 
                 text.push(Line::from(Span::raw(format!(
-                    "({:<16}) {:<5} {}",
-                    name, task.task.tid, cpu_str
+                    "{:<16} {:<7} {:<7} {}",
+                    name, task.task.tid, cpu_str, task.stat.state
                 ))));
             }
         } else {
