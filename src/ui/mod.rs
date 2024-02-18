@@ -2,9 +2,7 @@ use std::time::Duration;
 
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
-use ratatui::style::*;
 use ratatui::terminal::Frame;
-use ratatui::text::{Line, Span};
 use ratatui::widgets::*;
 
 pub mod widgets;
@@ -48,46 +46,14 @@ impl ScrollController {
         }
     }
     fn draw_scrollbar(&self, f: &mut Frame, area: Rect) {
-        let p = (self.scroll_offset as f32 / self.max_scroll as f32) * area.height as f32;
-        if p.is_nan() {
-            return;
-        }
-        let whole = p.floor();
-        let rest = p - whole;
-        assert!((0.0..=1.0).contains(&rest), "rest={rest} p={p}");
-        //let symbols = "·⸱⸳.";
-        let symbols = "\u{2588}\u{2587}\u{2586}\u{2585}\u{2584}\u{2583}\u{2582}\u{2581} "; // "█▇▆▅▄▃▂▁";
-        let mut text: Vec<Line> = Vec::new();
-        text.resize(
-            text.len() + whole as usize,
-            Line::from(Span::styled(
-                "_",
-                Style::default().fg(Color::Magenta).bg(Color::Magenta),
-            )),
-        );
-        {
-            let idx = (rest * (symbols.chars().count() - 1) as f32).round() as usize;
-            //assert!(idx <= 3, "idx={} rest={} len={}", idx, rest, symbols.chars().count());
-            let c = symbols.chars().nth(idx);
-            assert!(c.is_some(), "idx={idx}");
-            let c = c.unwrap();
-            let fg = if c.is_whitespace() {
-                Color::Magenta
-            } else {
-                Color::White
-            };
-            let s = format!("{}", if c.is_whitespace() { '+' } else { c });
-            text.push(Line::from(Span::styled(s, Style::default().fg(fg).bg(Color::Magenta))));
-        }
-        text.resize(
-            text.len() + area.height as usize,
-            Line::from(Span::styled("_", Style::default().fg(Color::White).bg(Color::White))),
-        );
+        let bar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .end_symbol(Some("↓"));
+        let mut state = ScrollbarState::new(self.max_scroll as usize).position(self.scroll_offset as usize);
 
-        let widget = Paragraph::new(text).style(Style::default().fg(Color::White));
-        f.render_widget(widget, area);
-        //"·⸱⸳."
+        f.render_stateful_widget(bar, area, &mut state);
     }
+    /// Sets the maximum scroll offset (the total number of lines of the content with the scrollbar)
     fn set_max_scroll(&mut self, max: i32) {
         let max: u16 = std::cmp::max(0, max) as u16;
         if self.scroll_offset >= max {
